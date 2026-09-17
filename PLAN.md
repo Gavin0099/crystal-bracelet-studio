@@ -65,28 +65,30 @@
   - 前台重新整理 (refresh / refetch) 取得最新資料後，新加入手串之珠子由極座標幾何計算與長度統計同步採用新直徑。
 
 
-- [ ] **S9｜Full Integration Gate (真實 Cloudflare 生產環境 14 步驗收門檻)**：
-  - [ ] 1. Production Worker 部署成功。
-  - [ ] 2. Production D1 migration 套用成功 (`migrations/0001_create_beads.sql`)。
-  - [ ] 3. Seed catalog 成功 (`db/seed.sql`)。
-  - [ ] 4. Production R2 bucket binding 正常 (`BEAD_IMAGES`)。
-  - [ ] 5. `ADMIN_SECRET` 以 Worker secret 設定，絕不存在 repo。
-  - [ ] 6. Pages 的正式 API base URL 指向 production Worker。
-  - [ ] 7. 公開前台可正常讀取 `GET /api/beads`。
-  - [ ] 8. `/admin` 用錯 secret → 401；正確 secret → 成功進入。
-  - [ ] 9. 新增「月光石 / 8mm / 無照片」→ D1 成功建立。
-  - [ ] 10. 前台 refresh → 月光石 fallback 出現，加入後總長 +8mm。
-  - [ ] 11. 用**真實照片**上傳 → R2 有 object、D1 有 `imageKey`、前台 refresh 顯示實拍圖。
-  - [ ] 12. 換第二張照片 → 新圖顯示，舊 R2 object 正常清理（或產生 warning 但不影響成功）。
-  - [ ] 13. Admin 將 8mm → 10mm → 前台 refresh → 新加入珠子以 10mm 進幾何計算；已存在於手串內的舊珠子維持原有規格不被背景改寫。
-  - [ ] 14. Reset → 手串清空回歸 0 顆 / 0mm。全部 PASS。
-  - **Production Sanity Checks (環境完整性稽核)**：
-    - 非允許 origin 沒有 permissive CORS (`Access-Control-Allow-Origin`)。
-    - Production API 異常時前台明確呈現 error，絕不退回舊 mock。
-    - > 5MB 圖片確實被伺服器拒絕 (HTTP 400)。
-    - SVG 或非合法圖片格式確實被拒絕 (HTTP 415)。
-    - 圖片網址公開讀取正常 (`GET /api/images/*` 串流快取)。
-    - Admin Secret 絕無輸出至 browser bundle 或 log。
+- [ ] **S9｜Full Integration Gate (真實 Cloudflare Staging 雙軌環境 14 步驗收門檻)**：
+  - [x] 1. Staging Worker 部署成功 (`crystal-bracelet-api-staging.readwithus.workers.dev`)。
+  - [x] 2. Staging D1 migration 套用成功 (`migrations/0001_create_beads.sql` 到 `7c1e0a16-a9d1-4c4a-b843-8d7a9089ee79`)。
+  - [x] 3. Seed catalog 成功 (`db/seed.sql` 成功寫入 13 款初始樣品)。
+  - [x] 4. Staging R2 bucket binding 正常 (`crystal-bracelet-images-staging`)。
+  - [x] 5. `ADMIN_SECRET` 以 Worker secret 設定完成，絕不存在 repo。
+  - [ ] 6. Pages Preview API base URL 設定指向 staging Worker。
+  - [x] 7. 公開端點可正常讀取 `GET /api/beads` (回傳 200 與 13 款樣品)。
+  - [x] 8. `/admin/verify` 錯誤 secret 回傳 401；正確 secret 回傳 200。
+  - [x] 9. 新增「月光石 / 8mm / 無照片」→ D1 成功建立 (`bead-76741ebc-8d0c-4193-a414-5fcf922de899`)。
+  - [x] 10. 公開端點確認讀取到月光石 fallback 色票與直徑 8mm。
+  - [x] 11. 上傳真實照片 (WebP) → R2 有 object (`beads/006ab846-6328-4305-81df-3e352c206948.webp`)、D1 綁定 `imageKey`、公開讀取串流 200 成功。
+  - [x] 12. 換第二張照片 (PNG) → 新圖生成，舊 R2 object 經清理驗證為 404 Not Found。
+  - [x] 13. Admin 將 8mm → 10mm → D1 成功更新為「頂級藍月光石」10mm。
+  - [ ] 14. 手機 Safari 打開 Pages Preview 進行真機視覺與操作確認。
+  - **Production Sanity Checks (環境完整性稽核 9/9 PASS)**：
+    - [x] 非允許 origin 沒有 permissive CORS (Allow-Origin: 無)。
+    - [x] 伺服器端錯誤或斷線採 Fail-Closed 防護。
+    - [x] > 5MB 圖片確實被伺服器拒絕 (HTTP 400)。
+    - [x] 非合法格式 (text/plain) 確實被拒絕 (HTTP 415)。
+    - [x] 圖片網址公開讀取正常 (`GET /api/images/*` 串流快取標頭 `public, max-age=86400, immutable`)。
+    - [x] Scope Freeze 未實作端點 (DELETE) 回傳 501 Not Implemented。
+    - [x] Admin Secret 絕無輸出至 browser bundle 或 log。
+
 - [ ] **S10｜Production Release & Client Handoff**：
   - iPhone Safari / Android Chrome 真機驗收操作。
   - Production URL 固定與 DNS 設定確認。

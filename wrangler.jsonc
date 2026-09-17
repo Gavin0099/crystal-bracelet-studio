@@ -27,8 +27,9 @@
         {
           "binding": "DB",
           "database_name": "crystal-bracelet-db-staging",
-          "database_id": "crystal-bracelet-db-staging-id"
+          "database_id": "7c1e0a16-a9d1-4c4a-b843-8d7a9089ee79"
         }
+
       ],
       "r2_buckets": [
         {
