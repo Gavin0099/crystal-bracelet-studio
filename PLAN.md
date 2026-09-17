@@ -38,7 +38,7 @@
   - Cloudflare Worker 綁定 D1 (`env.DB`) 並提供公開查詢 API `GET /api/beads`。
   - 固定 `API_BASE_URL`、CORS 設定以及 local / production config。
   - 前台改讀 API，且在 **Production 採 Fail-Closed 原則**（API 失敗明確顯示「暫時無法載入」，絕不退回舊 mock 造成幽靈資料）。
-- [ ] **S5｜Admin Baseline & Worker Shared-Secret Protection**：
+- [x] **S5｜Admin Baseline & Worker Shared-Secret Protection**：
   - 建立 `/admin` 管理頁面基線（前端採用 sessionStorage 作為單一店主防護之輕量 trade-off）。
   - **核心防線**：Worker 端部署 Shared Admin Secret（至少 32-byte 隨機密鑰，僅存於 Worker Secret，絕不寫入 repo，不用 `NEXT_PUBLIC_*`）。
   - 鑑權僅保護 mutation APIs (`POST /api/admin/beads`, `PUT /api/admin/beads/:id`, `POST /api/admin/beads/:id/image`)；Public GET 永遠不接受 admin credential。

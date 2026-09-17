@@ -11,9 +11,9 @@
 # ── PROVENANCE ────────────────────────────────────────────────────────────────
 schema_version: "1"
 baseline_version: 1.0.0
-source_commit: d8501a4f8c3206f8ca0cb3250e0bc675c54d275a
+source_commit: 1ca219fb2f6378e47ef8c0077dd02802eefd10d1
 framework_root: E:\BackUp\Git_EE\crystal-bracelet-studio\additional\ai-governance-framework
-initialized_at: 2026-09-17T02:45:50Z
+initialized_at: 2026-09-17T02:56:37Z
 initialized_by: governance_tools/adopt_governance.py
 
 # ── INTEGRITY ─────────────────────────────────────────────────────────────────

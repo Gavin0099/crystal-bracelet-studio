@@ -1,11 +1,11 @@
 /**
  * Cloudflare Worker API for Crystal Bracelet Studio
- * 提供前台公開讀取 API (GET /api/beads) 與 CORS 防護
+ * 提供前台公開讀取 API (GET /api/beads) 與後台受保護 Mutation APIs (/api/admin/*)
  */
 
 export interface Env {
   DB: any; // Cloudflare D1 Database Binding
-  ADMIN_SECRET?: string;
+  ADMIN_SECRET?: string; // 32-byte Shared Secret (Worker 環境變數，絕不寫入靜態 bundle)
   CORS_ORIGIN?: string;
 }
 
@@ -23,12 +23,59 @@ function getCorsHeaders(request: Request, env: Env): HeadersInit {
     (env.CORS_ORIGIN && origin === env.CORS_ORIGIN) ||
     origin.endsWith('.pages.dev');
 
-  return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : ALLOWED_ORIGINS[0],
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
   };
+
+  // 僅對受信任 Origin 附加 Allow-Origin，非信任 Origin 不提供放行 Header
+  if (isAllowed && origin) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
+  return headers;
+}
+
+/**
+ * 檢查 Admin Mutation 操作的 Bearer Token 授權
+ * 規則：
+ * 1. 若伺服器未設定 ADMIN_SECRET，必須 Fail-Closed 回傳 500，絕不意外放行。
+ * 2. 若缺少 Authorization Header 或 Token 不匹配，回傳 401。
+ */
+function verifyAdminAuthorization(
+  request: Request,
+  env: Env
+): { authorized: boolean; errorResponse?: Response; corsHeaders: HeadersInit } {
+  const corsHeaders = getCorsHeaders(request, env);
+
+  if (!env.ADMIN_SECRET || env.ADMIN_SECRET.trim() === '') {
+    return {
+      authorized: false,
+      errorResponse: new Response(
+        JSON.stringify({ error: 'Server configuration error: ADMIN_SECRET is not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+      corsHeaders,
+    };
+  }
+
+  const authHeader = request.headers.get('Authorization') || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  const token = match ? match[1].trim() : '';
+
+  if (!token || token !== env.ADMIN_SECRET) {
+    return {
+      authorized: false,
+      errorResponse: new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid or missing admin credential' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      ),
+      corsHeaders,
+    };
+  }
+
+  return { authorized: true, corsHeaders };
 }
 
 export default {
@@ -47,7 +94,7 @@ export default {
     const path = url.pathname;
 
     try {
-      // 1. 公開讀取：GET /api/beads
+      // 1. 公開讀取：GET /api/beads (Public - 永遠不需 credential，帶任意 token 一樣回傳公開資料)
       if (request.method === 'GET' && path === '/api/beads') {
         if (!env.DB) {
           return new Response(
@@ -77,6 +124,41 @@ export default {
             'Content-Type': 'application/json',
             'Cache-Control': 'public, max-age=60, s-maxage=120',
           },
+        });
+      }
+
+      // 2. 受保護 Mutation APIs 命名空間：/api/admin/*
+      if (path.startsWith('/api/admin/')) {
+        const authCheck = verifyAdminAuthorization(request, env);
+        if (!authCheck.authorized) {
+          return authCheck.errorResponse!;
+        }
+
+        // S5a: 授權驗證檢查端點 (供 /admin 頁面測試 Token 有效性)
+        if (request.method === 'POST' && path === '/api/admin/verify') {
+          return new Response(
+            JSON.stringify({ ok: true, message: 'Authorized admin session valid' }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // S5a: S6/S7/S8 Mutation Stub (保持 S6 邊界嚴格封鎖)
+        if (
+          (request.method === 'POST' && path === '/api/admin/beads') ||
+          (request.method === 'PUT' && path.startsWith('/api/admin/beads/'))
+        ) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              message: 'Authorized mutation stub. S6 will enable bead creation.',
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(JSON.stringify({ error: 'Not Found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
