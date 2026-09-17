@@ -360,65 +360,26 @@ NOT CLAIMED unless separately implemented and validated:
 ## Repo-Specific Risk Levels
 <!-- governance:key=risk_levels -->
 
-<!-- Define what makes a change HIGH / MEDIUM / LOW risk in this repo.
-Example:
-- HIGH: any change to auth, payment, or data migration paths
-- MEDIUM: adding a new API endpoint or external dependency
-- LOW: documentation, config comments, test-only changes
-
-Prompt yourself:
-- What changes in this repo can corrupt state, break compatibility, or cause production downtime?
-- What changes are review-heavy but still reversible?
-- What changes are safe enough to keep in a fast path?
--->
-
-N/A
+- HIGH: 修改極座標幾何計算 (`src/domain/layout.ts`)、手圍長度計算或商品定價計量邏輯 (`priceMinor`)。
+- MEDIUM: 變更手串畫布 SVG 渲染 (`BraceletCanvas.tsx`, `BeadSvg.tsx`)、商品假資料庫結構 (`mock-beads.ts`)、建置設定 (`next.config.ts`)。
+- LOW: 視覺 CSS 調整、文案修訂、說明文件更新。
 
 ## Must-Test Paths
 <!-- governance:key=must_test_paths -->
 
-<!-- List modules or code paths that require tests before merge.
-Example:
-- src/auth/       any change here needs integration tests
-- src/migrations/ schema changes need a rollback test
-
-Prompt yourself:
-- Which files or directories would you never want changed without a test?
-- Which paths are easy to break with static changes alone?
-- Which user-visible or hardware-facing flows need explicit coverage?
--->
-
-N/A
+- src/domain/ : 任何對幾何排列與手圍長度計算的變更，必須通過單元測試 (`npm run test`)，確保 12 項 Invariants 測試無任何回歸。
 
 ## L1 → L2 Escalation Triggers
 <!-- governance:key=escalation_triggers -->
 
-<!-- When does this repo's work need the full L2 evidence checklist?
-Example:
-- Changing shared database schema
-- Modifying public API contracts
-- Any change touching >3 modules simultaneously
-
-Prompt yourself:
-- What kinds of changes cross system boundaries?
-- What changes would require a reviewer to ask for stronger evidence than normal?
-- What changes become risky mainly because they are broad, not because they touch one file?
--->
-
-N/A
+- 修改幾何演算法（例如從弧長佔比調整為幾何相切解算）。
+- 跨越 Phase 1 邊界：引入後端資料庫 (Cloudflare D1)、R2 圖片儲存或 API 端點。
+- 涉及金流、使用者帳號認證或真實交易資料。
 
 ## Repo-Specific Forbidden Behaviors
 <!-- governance:key=forbidden_behaviors -->
 
-<!-- Add restrictions beyond the framework baseline.
-Example:
-- Do not write directly to the production database from tests
-- Do not commit .env files even if .gitignored
-
-Prompt yourself:
-- What are the easy-to-make mistakes that are specific to this repo?
-- Are there tool, environment, hardware, or deployment actions that should never happen casually?
-- What "cleanup" or "shortcut" behaviors have already caused pain here?
--->
-
-N/A
+- 禁止在 Domain 層 (`src/domain/`) 引入畫布像素 (`px`)、SVG 元素或 React DOM 依賴。
+- 禁止使用 JavaScript 浮點數直接做貨幣定價計算（必須使用 `priceMinor` 整數）。
+- 禁止宣稱「此手串保證合身」（必須遵守 Claim Ceiling，維持「參考總直徑」之誠實溝通）。
+- 禁止未經授權在 Phase 1 導入重型後端、資料庫或第三方付費依賴。
