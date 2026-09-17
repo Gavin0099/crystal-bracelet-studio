@@ -42,7 +42,7 @@
   - 建立 `/admin` 管理頁面基線（前端採用 sessionStorage 作為單一店主防護之輕量 trade-off）。
   - **核心防線**：Worker 端部署 Shared Admin Secret（至少 32-byte 隨機密鑰，僅存於 Worker Secret，絕不寫入 repo，不用 `NEXT_PUBLIC_*`）。
   - 鑑權僅保護 mutation APIs (`POST /api/admin/beads`, `PUT /api/admin/beads/:id`, `POST /api/admin/beads/:id/image`)；Public GET 永遠不接受 admin credential。
-- [ ] **S6｜Add Bead (無照片亦可建立)**：
+- [x] **S6｜Add Bead (無照片亦可建立)**：
   - 後台新增珠子（名稱、分類、尺寸），寫入 D1；`image_key` 預設為 NULL，由系統自動提供預設 fallbackColor。
   - 前台重新載入時即可呈現新珠子。
 - [ ] **S7｜R2 Upload + Replace + 跨資源補償清理**：

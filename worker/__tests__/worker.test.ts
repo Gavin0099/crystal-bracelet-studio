@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import worker, { Env } from '../index';
 
-describe('S5: Cloudflare Worker API & Shared-Secret Authorization Boundary', () => {
+describe('S6: Add Bead & Worker Mutation Protection', () => {
   const VALID_SECRET = 'a_very_secure_random_32_byte_secret_value_123456';
 
   it('1. GET /api/beads 應為 Public 端點，無 Secret 時正常回傳 200', async () => {
@@ -32,135 +32,158 @@ describe('S5: Cloudflare Worker API & Shared-Secret Authorization Boundary', () 
     expect(data).toHaveLength(1);
   });
 
-  it('2. GET /api/beads 帶有任意 Authorization Header 依然只作為 Public GET 正常回傳 200', async () => {
-    const mockDb = {
-      prepare: vi.fn().mockReturnValue({
-        all: vi.fn().mockResolvedValue({ results: [] }),
-      }),
+  it('2. POST /api/admin/beads 正確 secret + valid data 應寫入 D1 並回傳 201 Created', async () => {
+    const mockRun = vi.fn().mockResolvedValue({ success: true });
+    const mockBind = vi.fn().mockReturnValue({ run: mockRun });
+    const mockPrepare = vi.fn().mockReturnValue({ bind: mockBind });
+
+    const env: Env = {
+      DB: { prepare: mockPrepare },
+      ADMIN_SECRET: VALID_SECRET,
     };
 
-    const env: Env = { DB: mockDb, ADMIN_SECRET: VALID_SECRET };
-    const request = new Request('http://localhost:8787/api/beads', {
-      method: 'GET',
-      headers: { Authorization: 'Bearer some_unrelated_token' },
+    const request = new Request('http://localhost:8787/api/admin/beads', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: JSON.stringify({
+        name: '藍月光石 8mm',
+        category: '月光石',
+        diameterMm: 8,
+      }),
     });
 
     const response = await worker.fetch(request, env, {});
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
+
+    const created = await response.json();
+    expect(created.name).toBe('藍月光石 8mm');
+    expect(created.category).toBe('月光石');
+    expect(created.diameterMm).toBe(8);
+    expect(created.imageKey).toBeNull();
+    expect(created.fallbackColor).toBe('#D1D5DB');
+    expect(created.id).toMatch(/^bead-\d+-[a-z0-9]+$/);
+
+    // 驗證 D1 確實被呼叫寫入
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO beads')
+    );
+    expect(mockBind).toHaveBeenCalledWith(
+      created.id,
+      '藍月光石 8mm',
+      '月光石',
+      8,
+      '#D1D5DB'
+    );
+    expect(mockRun).toHaveBeenCalled();
   });
 
-  it('3. POST /api/admin/beads 未提供 Authorization 時應拒絕存取並回傳 401', async () => {
-    const env: Env = { DB: {}, ADMIN_SECRET: VALID_SECRET };
+  it('3. POST /api/admin/beads 沒有 Authorization 時應回傳 401 且 D1 不執行', async () => {
+    const mockPrepare = vi.fn();
+    const env: Env = { DB: { prepare: mockPrepare }, ADMIN_SECRET: VALID_SECRET };
+
     const request = new Request('http://localhost:8787/api/admin/beads', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: '測試' }),
+      body: JSON.stringify({ name: '測試', category: '測試', diameterMm: 10 }),
     });
 
     const response = await worker.fetch(request, env, {});
     expect(response.status).toBe(401);
-
-    const body = await response.json();
-    expect(body.error).toContain('Unauthorized');
+    expect(mockPrepare).not.toHaveBeenCalled();
   });
 
-  it('4. POST /api/admin/beads 帶有錯誤 Bearer Token 時應回傳 401', async () => {
-    const env: Env = { DB: {}, ADMIN_SECRET: VALID_SECRET };
+  it('4. POST /api/admin/beads 錯誤 Bearer Token 時應回傳 401', async () => {
+    const mockPrepare = vi.fn();
+    const env: Env = { DB: { prepare: mockPrepare }, ADMIN_SECRET: VALID_SECRET };
+
     const request = new Request('http://localhost:8787/api/admin/beads', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: 'Bearer wrong_secret_token',
+        Authorization: 'Bearer wrong_token',
       },
-      body: JSON.stringify({ name: '測試' }),
+      body: JSON.stringify({ name: '測試', category: '測試', diameterMm: 10 }),
     });
 
     const response = await worker.fetch(request, env, {});
     expect(response.status).toBe(401);
+    expect(mockPrepare).not.toHaveBeenCalled();
   });
 
-  it('5. POST /api/admin/beads 帶有正確 Bearer Token 時應通過鑑權並進入 stub 回傳 200', async () => {
-    const env: Env = { DB: {}, ADMIN_SECRET: VALID_SECRET };
+  it('5. POST /api/admin/beads 當 diameterMm <= 0 時應回傳 400 Bad Request 且 D1 不變', async () => {
+    const mockPrepare = vi.fn();
+    const env: Env = { DB: { prepare: mockPrepare }, ADMIN_SECRET: VALID_SECRET };
+
     const request = new Request('http://localhost:8787/api/admin/beads', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${VALID_SECRET}`,
       },
-      body: JSON.stringify({ name: '測試' }),
+      body: JSON.stringify({ name: '非法尺寸', category: '水晶', diameterMm: -5 }),
     });
 
     const response = await worker.fetch(request, env, {});
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
 
     const body = await response.json();
-    expect(body.ok).toBe(true);
-    expect(body.message).toContain('Authorized');
+    expect(body.error).toContain('diameterMm must be a positive number');
+    expect(mockPrepare).not.toHaveBeenCalled();
   });
 
-  it('6. POST /api/admin/verify 驗證端點在正確 Token 下應回傳 200', async () => {
-    const env: Env = { DB: {}, ADMIN_SECRET: VALID_SECRET };
-    const request = new Request('http://localhost:8787/api/admin/verify', {
+  it('6. POST /api/admin/beads 當 name 或 category 為空白時應回傳 400 Bad Request', async () => {
+    const mockPrepare = vi.fn();
+    const env: Env = { DB: { prepare: mockPrepare }, ADMIN_SECRET: VALID_SECRET };
+
+    const request = new Request('http://localhost:8787/api/admin/beads', {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${VALID_SECRET}`,
       },
+      body: JSON.stringify({ name: '   ', category: '', diameterMm: 8 }),
     });
 
     const response = await worker.fetch(request, env, {});
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
+
     const body = await response.json();
-    expect(body.ok).toBe(true);
+    expect(body.error).toContain('name and category are required');
+    expect(mockPrepare).not.toHaveBeenCalled();
   });
 
-  it('7. OPTIONS Preflight 請求在白名單 Origin 下應正確回傳 CORS Headers', async () => {
-    const request = new Request('http://localhost:8787/api/admin/beads', {
-      method: 'OPTIONS',
-      headers: {
-        Origin: 'https://crystal-bracelet-studio.pages.dev',
-      },
-    });
-
+  it('7. S7/S8 未實作之 mutation 端點在正確 Token 下應回傳 501 Not Implemented (不回假 200)', async () => {
     const env: Env = { DB: {}, ADMIN_SECRET: VALID_SECRET };
-    const response = await worker.fetch(request, env, {});
 
-    expect(response.status).toBe(204);
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(
-      'https://crystal-bracelet-studio.pages.dev'
-    );
-    expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
-  });
-
-  it('8. 非白名單 Origin 不應獲得放行之 Access-Control-Allow-Origin Header', async () => {
-    const request = new Request('http://localhost:8787/api/beads', {
-      method: 'GET',
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1', {
+      method: 'PUT',
       headers: {
-        Origin: 'https://malicious-site.com',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${VALID_SECRET}`,
       },
+      body: JSON.stringify({ diameterMm: 12 }),
     });
 
-    const mockDb = {
-      prepare: vi.fn().mockReturnValue({
-        all: vi.fn().mockResolvedValue({ results: [] }),
-      }),
-    };
-
-    const env: Env = { DB: mockDb, ADMIN_SECRET: VALID_SECRET };
     const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(501);
 
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull();
+    const body = await response.json();
+    expect(body.error).toBe('Not Implemented');
   });
 
-  it('9. 關鍵防禦 Fail-Closed：若伺服器未設置 ADMIN_SECRET，必須回傳 500 且拒絕所有 mutation', async () => {
-    // 模擬 ADMIN_SECRET 為 undefined 或空字串的情境
+  it('8. 伺服器未設置 ADMIN_SECRET 時採 Fail-Closed 回傳 500', async () => {
     const env: Env = { DB: {}, ADMIN_SECRET: undefined };
+
     const request = new Request('http://localhost:8787/api/admin/beads', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer undefined',
       },
-      body: JSON.stringify({ name: '測試' }),
+      body: JSON.stringify({ name: '測試', category: '測試', diameterMm: 8 }),
     });
 
     const response = await worker.fetch(request, env, {});

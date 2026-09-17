@@ -142,17 +142,81 @@ export default {
           );
         }
 
-        // S5a: S6/S7/S8 Mutation Stub (保持 S6 邊界嚴格封鎖)
+        // S6: 新增珠子 (Add Bead) — 伺服器端驗證並寫入 D1
+        if (request.method === 'POST' && path === '/api/admin/beads') {
+          if (!env.DB) {
+            return new Response(
+              JSON.stringify({ error: 'Database binding DB is missing' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          let body: any;
+          try {
+            body = await request.json();
+          } catch {
+            return new Response(
+              JSON.stringify({ error: 'Invalid JSON payload' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          const name = typeof body?.name === 'string' ? body.name.trim() : '';
+          const category = typeof body?.category === 'string' ? body.category.trim() : '';
+          const diameterMm = Number(body?.diameterMm);
+
+          // 嚴格校驗：名稱與分類不可空白
+          if (!name || !category) {
+            return new Response(
+              JSON.stringify({ error: 'Validation Error: name and category are required' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 嚴格校驗：直徑必須為大於 0 之正數
+          if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
+            return new Response(
+              JSON.stringify({ error: 'Validation Error: diameterMm must be a positive number' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 伺服器端全權生成屬性 (不信任 Client 傳送之 id、imageKey 或色票)
+          const beadId = `bead-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const fallbackColor = '#D1D5DB';
+
+          await env.DB.prepare(
+            `INSERT INTO beads (id, name, category, diameter_mm, image_key, fallback_color) VALUES (?, ?, ?, ?, NULL, ?)`
+          )
+            .bind(beadId, name, category, diameterMm, fallbackColor)
+            .run();
+
+          const createdBead = {
+            id: beadId,
+            name,
+            category,
+            diameterMm,
+            imageKey: null,
+            fallbackColor,
+          };
+
+          return new Response(JSON.stringify(createdBead), {
+            status: 201,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // S7/S8 未來切片 Mutation：尚未實作一律回傳 501 Not Implemented (不回假 200)
         if (
-          (request.method === 'POST' && path === '/api/admin/beads') ||
-          (request.method === 'PUT' && path.startsWith('/api/admin/beads/'))
+          (request.method === 'PUT' && path.startsWith('/api/admin/beads/')) ||
+          (request.method === 'POST' && path.includes('/image'))
         ) {
           return new Response(
             JSON.stringify({
-              ok: true,
-              message: 'Authorized mutation stub. S6 will enable bead creation.',
+              error: 'Not Implemented',
+              message: 'This mutation endpoint is not yet implemented (scheduled for S7/S8).',
             }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
