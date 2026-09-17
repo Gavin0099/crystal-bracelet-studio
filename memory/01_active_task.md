@@ -16,3 +16,5 @@
 - S5 Admin Baseline & Worker Shared-Secret Protection completed with 27 tests passing <!-- memory_record_projection:active-task-summary:ef1713f3155f4c4e49a2e91511fdfff0e83b533f30563f1c8563973d07ab8d2b -->
 
 - S6 Add Bead completed with D1 insertion, 501 stub fix, admin form, and 26 tests passing <!-- memory_record_projection:active-task-summary:aab1c504a7a6cd54c85304e5cc7710ad9412e86fa5871a00d6297a8980befa98 -->
+
+- S6 E2E Integration evidence added (POST -> D1 -> GET -> Geometry) and admin name prompt refined <!-- memory_record_projection:active-task-summary:925d2fa4eb288315d9b807cf4c32d146993121ab164910b35e72b768084bd11f -->
