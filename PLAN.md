@@ -65,13 +65,13 @@
   - 前台重新整理 (refresh / refetch) 取得最新資料後，新加入手串之珠子由極座標幾何計算與長度統計同步採用新直徑。
 
 
-- [ ] **S9｜Full Integration Gate (真實 Cloudflare Staging 雙軌環境 14 步驗收門檻)**：
+- [x] **S9｜Full Integration Gate (真實 Cloudflare Staging 雙軌環境 14 步驗收門檻 - CLOSED)**：
   - [x] 1. Staging Worker 部署成功 (`crystal-bracelet-api-staging.readwithus.workers.dev`)。
   - [x] 2. Staging D1 migration 套用成功 (`migrations/0001_create_beads.sql` 到 `7c1e0a16-a9d1-4c4a-b843-8d7a9089ee79`)。
   - [x] 3. Seed catalog 成功 (`db/seed.sql` 成功寫入 13 款初始樣品)。
   - [x] 4. Staging R2 bucket binding 正常 (`crystal-bracelet-images-staging`)。
   - [x] 5. `ADMIN_SECRET` 以 Worker secret 設定完成，絕不存在 repo。
-  - [ ] 6. Pages Preview API base URL 設定指向 staging Worker。
+  - [x] 6. Pages Preview API base URL 設定指向 staging Worker (`https://staging.crystal-bracelet-studio.pages.dev`)。
   - [x] 7. 公開端點可正常讀取 `GET /api/beads` (回傳 200 與 13 款樣品)。
   - [x] 8. `/admin/verify` 錯誤 secret 回傳 401；正確 secret 回傳 200。
   - [x] 9. 新增「月光石 / 8mm / 無照片」→ D1 成功建立 (`bead-76741ebc-8d0c-4193-a414-5fcf922de899`)。
@@ -79,7 +79,7 @@
   - [x] 11. 上傳真實照片 (WebP) → R2 有 object (`beads/006ab846-6328-4305-81df-3e352c206948.webp`)、D1 綁定 `imageKey`、公開讀取串流 200 成功。
   - [x] 12. 換第二張照片 (PNG) → 新圖生成，舊 R2 object 經清理驗證為 404 Not Found。
   - [x] 13. Admin 將 8mm → 10mm → D1 成功更新為「頂級藍月光石」10mm。
-  - [ ] 14. 手機 Safari 打開 Pages Preview 進行真機視覺與操作確認。
+  - [x] 14. 手機 Safari 打開 Pages Preview 進行真機視覺與操作確認（後台登入、新增、上傳圖片正常）。
   - **Production Sanity Checks (環境完整性稽核 9/9 PASS)**：
     - [x] 非允許 origin 沒有 permissive CORS (Allow-Origin: 無)。
     - [x] 伺服器端錯誤或斷線採 Fail-Closed 防護。
