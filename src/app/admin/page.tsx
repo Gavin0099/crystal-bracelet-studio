@@ -12,6 +12,9 @@ import {
   Image as ImageIcon,
   Loader2,
   RefreshCw,
+  Edit2,
+  Save,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { API_BASE_URL } from '../../config/api';
@@ -45,6 +48,13 @@ export default function AdminPage() {
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  // S8 修改珠子規格狀態 (直徑/名稱/分類)
+  const [editingBeadId, setEditingBeadId] = useState<string | null>(null);
+  const [editName, setEditName] = useState<string>('');
+  const [editCategory, setEditCategory] = useState<string>('');
+  const [editDiameterMm, setEditDiameterMm] = useState<number | ''>(8);
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
   const getApiBase = () => {
     const isRelative = !API_BASE_URL.startsWith('http');
@@ -288,7 +298,98 @@ export default function AdminPage() {
     }
   };
 
+  // S8: 啟動編輯珠子規格
+  const startEditing = (bead: BeadSpec) => {
+    setEditingBeadId(bead.id);
+    setEditName(bead.name);
+    setEditCategory(bead.category);
+    setEditDiameterMm(bead.diameterMm);
+    setImageActionMessage(null);
+  };
+
+  // S8: 取消編輯
+  const cancelEditing = () => {
+    setEditingBeadId(null);
+  };
+
+  // S8: 儲存編輯珠子規格 (PUT /api/admin/beads/:id)
+  const handleSaveEdit = async (beadId: string) => {
+    const secret = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!secret) {
+      setImageActionMessage({
+        id: beadId,
+        type: 'error',
+        text: '管理憑證已過期，請重新登入',
+      });
+      setIsAuthenticated(false);
+      return;
+    }
+
+    if (!editName.trim() || !editCategory.trim()) {
+      setImageActionMessage({
+        id: beadId,
+        type: 'error',
+        text: '名稱與分類不可空白',
+      });
+      return;
+    }
+
+    const numDia = Number(editDiameterMm);
+    if (!Number.isFinite(numDia) || numDia <= 0) {
+      setImageActionMessage({
+        id: beadId,
+        type: 'error',
+        text: '直徑必須大於 0 mm',
+      });
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const base = getApiBase();
+      const res = await fetch(`${base}/api/admin/beads/${beadId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${secret}`,
+        },
+        body: JSON.stringify({
+          name: editName.trim(),
+          category: editCategory.trim(),
+          diameterMm: numDia,
+        }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setBeads((prev) => prev.map((b) => (b.id === beadId ? updated : b)));
+        setImageActionMessage({
+          id: beadId,
+          type: 'success',
+          text: `成功更新「${updated.name}」規格（${updated.diameterMm} mm）！`,
+        });
+        setEditingBeadId(null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setImageActionMessage({
+          id: beadId,
+          type: 'error',
+          text: errData.error || `更新失敗 (HTTP ${res.status})`,
+        });
+      }
+    } catch (err: any) {
+      setImageActionMessage({
+        id: beadId,
+        type: 'error',
+        text: `更新請求失敗：${err.message || '連線中斷'}`,
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   return (
+
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col items-center justify-start p-4 font-sans">
       {/* 頂部回到前台連結 */}
       <div className="w-full max-w-lg mb-4 flex justify-between items-center text-xs">
@@ -475,80 +576,179 @@ export default function AdminPage() {
                   {beads.map((bead) => {
                     const imageUrl = getBeadImageUrl(bead.imageKey);
                     const isUploading = uploadingBeadId === bead.id;
+                    const isEditing = editingBeadId === bead.id;
                     const actionMsg =
                       imageActionMessage?.id === bead.id ? imageActionMessage : null;
 
                     return (
+
                       <div
                         key={bead.id}
                         className="bg-white border border-slate-200/90 rounded-xl p-3 flex flex-col gap-2 shadow-2xs hover:border-slate-300 transition-colors"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          {/* 縮圖與基本資料 */}
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full shadow-inner overflow-hidden border border-slate-200 shrink-0 flex items-center justify-center bg-slate-100 relative">
-                              {imageUrl ? (
-                                <img
-                                  src={imageUrl}
-                                  alt={bead.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div
-                                  className="w-full h-full flex items-center justify-center text-[10px] text-white font-bold"
-                                  style={{ backgroundColor: bead.fallbackColor || '#8a62a7' }}
-                                >
-                                  {bead.diameterMm}
-                                </div>
-                              )}
+                        {isEditing ? (
+                          // 行內編輯模式 (S8)
+                          <div className="flex flex-col gap-2 bg-slate-50 p-2.5 rounded-lg border border-indigo-100">
+                            <div className="text-[11px] font-semibold text-indigo-700 flex items-center justify-between">
+                              <span>編輯珠子規格</span>
+                              <span className="text-[10px] text-slate-400">ID: {bead.id}</span>
                             </div>
 
-                            <div className="flex flex-col">
-                              <span className="text-xs font-semibold text-slate-800">
-                                {bead.name}
-                              </span>
-                              <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                                <span>{bead.category}</span>
-                                <span>•</span>
-                                <span className="font-semibold text-indigo-600">
-                                  {bead.diameterMm} mm
-                                </span>
+                            <div className="grid grid-cols-1 gap-1.5">
+                              <div>
+                                <label className="block text-[11px] font-medium text-slate-600 mb-0.5">
+                                  名稱
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editName}
+                                  onChange={(e) => setEditName(e.target.value)}
+                                  className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <div>
+                                  <label className="block text-[11px] font-medium text-slate-600 mb-0.5">
+                                    分類
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editCategory}
+                                    onChange={(e) => setEditCategory(e.target.value)}
+                                    className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-medium text-slate-600 mb-0.5">
+                                    直徑 (mm)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    min="1"
+                                    max="30"
+                                    value={editDiameterMm}
+                                    onChange={(e) =>
+                                      setEditDiameterMm(
+                                        e.target.value === '' ? '' : Number(e.target.value)
+                                      )
+                                    }
+                                    className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  />
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          {/* 上傳 / 替換圖片按鈕 */}
-                          <div>
-                            <label
-                              className={`cursor-pointer px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-colors ${
-                                isUploading
-                                  ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                                  : imageUrl
-                                  ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
-                              }`}
-                            >
-                              {isUploading ? (
-                                <>
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  <span>上傳中...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <UploadCloud className="w-3.5 h-3.5" />
-                                  <span>{imageUrl ? '替換照片' : '上傳照片'}</span>
-                                </>
-                              )}
-                              <input
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                disabled={isUploading}
-                                onChange={(e) => handleImageFileChange(bead, e)}
-                                className="hidden"
-                              />
-                            </label>
+                            <div className="flex justify-end gap-1.5 mt-1 pt-1 border-t border-slate-200/60">
+                              <button
+                                type="button"
+                                onClick={cancelEditing}
+                                disabled={isSavingEdit}
+                                className="px-2.5 py-1 rounded-md text-xs text-slate-600 hover:bg-slate-200 transition-colors flex items-center gap-1"
+                              >
+                                <X className="w-3 h-3" /> 取消
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(bead.id)}
+                                disabled={isSavingEdit}
+                                className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-medium transition-colors flex items-center gap-1 disabled:opacity-60"
+                              >
+                                {isSavingEdit ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    儲存中...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Save className="w-3 h-3" />
+                                    儲存修改
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          // 一般展示模式 (可上傳照片或切換編輯)
+                          <div className="flex items-center justify-between gap-3">
+                            {/* 縮圖與基本資料 */}
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full shadow-inner overflow-hidden border border-slate-200 shrink-0 flex items-center justify-center bg-slate-100 relative">
+                                {imageUrl ? (
+                                  <img
+                                    src={imageUrl}
+                                    alt={bead.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div
+                                    className="w-full h-full flex items-center justify-center text-[10px] text-white font-bold"
+                                    style={{ backgroundColor: bead.fallbackColor || '#8a62a7' }}
+                                  >
+                                    {bead.diameterMm}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex flex-col">
+                                <span className="text-xs font-semibold text-slate-800">
+                                  {bead.name}
+                                </span>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                  <span>{bead.category}</span>
+                                  <span>•</span>
+                                  <span className="font-semibold text-indigo-600">
+                                    {bead.diameterMm} mm
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 操作按鈕群 (編輯規格 + 上傳/替換照片) */}
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => startEditing(bead)}
+                                title="修改尺寸、名稱或分類"
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                <span>編輯</span>
+                              </button>
+
+                              <label
+                                className={`cursor-pointer px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1 transition-colors ${
+                                  isUploading
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                                    : imageUrl
+                                    ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                                    : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                                }`}
+                              >
+                                {isUploading ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>上傳中</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UploadCloud className="w-3.5 h-3.5" />
+                                    <span>{imageUrl ? '換圖' : '照片'}</span>
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  disabled={isUploading}
+                                  onChange={(e) => handleImageFileChange(bead, e)}
+                                  className="hidden"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+
 
                         {/* 上傳狀態提示訊息 */}
                         {actionMsg && (

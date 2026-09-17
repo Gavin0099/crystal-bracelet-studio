@@ -377,12 +377,89 @@ export default {
           );
         }
 
-        // S8 未來切片 Mutation：尚未實作回傳 501 Not Implemented
-        if (request.method === 'PUT' && path.startsWith('/api/admin/beads/')) {
+        // S8: 編輯珠子資料 (PUT /api/admin/beads/:id)
+        const editMatch = path.match(/^\/api\/admin\/beads\/([^/]+)$/);
+        if (request.method === 'PUT' && editMatch) {
+          const beadId = editMatch[1];
+
+          if (!env.DB) {
+            return new Response(
+              JSON.stringify({ error: 'Database binding DB is missing' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          let body: any;
+          try {
+            body = await request.json();
+          } catch {
+            return new Response(
+              JSON.stringify({ error: 'Invalid JSON payload' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          const name = typeof body?.name === 'string' ? body.name.trim() : '';
+          const category = typeof body?.category === 'string' ? body.category.trim() : '';
+          const diameterMm = Number(body?.diameterMm);
+
+          if (!name || !category) {
+            return new Response(
+              JSON.stringify({ error: 'Validation Error: name and category are required' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
+            return new Response(
+              JSON.stringify({ error: 'Validation Error: diameterMm must be a positive number' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 1. 檢驗珠子是否存在
+          const existingBead = await env.DB.prepare(
+            `SELECT id, name, category, diameter_mm, image_key, fallback_color FROM beads WHERE id = ?`
+          )
+            .bind(beadId)
+            .first();
+
+          if (!existingBead) {
+            return new Response(JSON.stringify({ error: 'Bead not found' }), {
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // 2. 更新資料庫
+          await env.DB.prepare(
+            `UPDATE beads SET name = ?, category = ?, diameter_mm = ?, updated_at = unixepoch() WHERE id = ?`
+          )
+            .bind(name, category, diameterMm, beadId)
+            .run();
+
+          const updatedBead = {
+            id: beadId,
+            name,
+            category,
+            diameterMm,
+            imageKey: existingBead.image_key || null,
+            fallbackColor: existingBead.fallback_color,
+          };
+
+          return new Response(JSON.stringify(updatedBead), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // 未支援之 Mutation (如 DELETE, PATCH 等未實作之管理端點) 回傳 501 Not Implemented
+
+        if (['DELETE', 'PATCH'].includes(request.method)) {
           return new Response(
             JSON.stringify({
               error: 'Not Implemented',
-              message: 'This mutation endpoint is not yet implemented (scheduled for S8).',
+              message: 'This mutation endpoint is not implemented.',
             }),
             { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -393,6 +470,7 @@ export default {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+
 
       // 404 Not Found
       return new Response(JSON.stringify({ error: 'Not Found' }), {

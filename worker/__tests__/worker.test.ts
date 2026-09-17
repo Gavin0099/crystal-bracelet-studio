@@ -226,16 +226,15 @@ describe('S6: Add Bead & Worker Mutation Protection', () => {
     expect(mockPrepare).not.toHaveBeenCalled();
   });
 
-  it('7. S7/S8 未實作之 mutation 端點在正確 Token 下應回傳 501 Not Implemented (不回假 200)', async () => {
+  it('7. 未支援之 mutation 端點 (如 DELETE) 在正確 Token 下應回傳 501 Not Implemented (Scope Freeze: 不回假 200)', async () => {
     const env: Env = { DB: {}, ADMIN_SECRET: VALID_SECRET };
 
     const request = new Request('http://localhost:8787/api/admin/beads/bead-1', {
-      method: 'PUT',
+      method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${VALID_SECRET}`,
       },
-      body: JSON.stringify({ diameterMm: 12 }),
     });
 
     const response = await worker.fetch(request, env, {});
@@ -244,6 +243,7 @@ describe('S6: Add Bead & Worker Mutation Protection', () => {
     const body = await response.json();
     expect(body.error).toBe('Not Implemented');
   });
+
 
   it('8. 伺服器未設置 ADMIN_SECRET 時採 Fail-Closed 回傳 500', async () => {
     const env: Env = { DB: {}, ADMIN_SECRET: undefined };
@@ -645,4 +645,251 @@ describe('S7: Image Upload, Replacement & R2 Compensation Cleanup', () => {
     expect(data.error).toBe('Image not found');
   });
 });
+
+describe('S8: Edit Bead (Size, Name, Category) & Domain Engine Integration', () => {
+  const VALID_SECRET = 'a_very_secure_random_32_byte_secret_value_123456';
+
+  it('1. PUT /api/admin/beads/:id 正確 secret + 合法資料應更新 D1 並回傳 200 OK 與更新後的資料', async () => {
+    let storedBead = {
+      id: 'bead-1',
+      name: '紫水晶',
+      category: '水晶',
+      diameter_mm: 8,
+      image_key: 'beads/old.webp',
+      fallback_color: '#8a62a7',
+    };
+
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        if (query.includes('SELECT id, name, category, diameter_mm, image_key, fallback_color')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue(storedBead),
+            }),
+          };
+        }
+        if (query.includes('UPDATE beads SET name = ?, category = ?, diameter_mm = ?')) {
+          return {
+            bind: vi.fn().mockImplementation((name: string, category: string, diameter_mm: number, id: string) => ({
+              run: vi.fn().mockImplementation(async () => {
+                storedBead = {
+                  ...storedBead,
+                  name,
+                  category,
+                  diameter_mm,
+                };
+                return { success: true };
+              }),
+            })),
+          };
+        }
+        return {};
+      }),
+    };
+
+    const env: Env = { DB: mockDb, ADMIN_SECRET: VALID_SECRET };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: JSON.stringify({
+        name: '特選烏拉圭紫水晶',
+        category: '紫水晶',
+        diameterMm: 10,
+      }),
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(200);
+
+    const updated = await response.json();
+    expect(updated.id).toBe('bead-1');
+    expect(updated.name).toBe('特選烏拉圭紫水晶');
+    expect(updated.category).toBe('紫水晶');
+    expect(updated.diameterMm).toBe(10);
+    expect(updated.imageKey).toBe('beads/old.webp');
+    expect(updated.fallbackColor).toBe('#8a62a7');
+
+    expect(storedBead.diameter_mm).toBe(10);
+    expect(storedBead.name).toBe('特選烏拉圭紫水晶');
+  });
+
+  it('2. PUT /api/admin/beads/:id 當 diameterMm <= 0 時應回傳 400 且 D1 不變', async () => {
+    const mockPrepare = vi.fn();
+    const env: Env = { DB: { prepare: mockPrepare }, ADMIN_SECRET: VALID_SECRET };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: JSON.stringify({
+        name: '合法名稱',
+        category: '分類',
+        diameterMm: -2,
+      }),
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(400);
+
+    const data = await response.json();
+    expect(data.error).toContain('diameterMm must be a positive number');
+    expect(mockPrepare).not.toHaveBeenCalled();
+  });
+
+  it('3. PUT /api/admin/beads/:id 當 name 或 category 為空白時應回傳 400', async () => {
+    const mockPrepare = vi.fn();
+    const env: Env = { DB: { prepare: mockPrepare }, ADMIN_SECRET: VALID_SECRET };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: JSON.stringify({
+        name: '',
+        category: '   ',
+        diameterMm: 8,
+      }),
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(400);
+
+    const data = await response.json();
+    expect(data.error).toContain('name and category are required');
+    expect(mockPrepare).not.toHaveBeenCalled();
+  });
+
+  it('4. PUT /api/admin/beads/:id 珠子不存在時應回傳 404 Not Found', async () => {
+    const mockDb = {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue(null),
+        }),
+      }),
+    };
+
+    const env: Env = { DB: mockDb, ADMIN_SECRET: VALID_SECRET };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/non-existent-bead', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: JSON.stringify({
+        name: '不存在的珠子',
+        category: '分類',
+        diameterMm: 8,
+      }),
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(404);
+
+    const data = await response.json();
+    expect(data.error).toBe('Bead not found');
+  });
+
+  it('5. PUT /api/admin/beads/:id 未授權或錯誤 Token 應回傳 401 Unauthorized', async () => {
+    const env: Env = { DB: {}, ADMIN_SECRET: VALID_SECRET };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer invalid_secret',
+      },
+      body: JSON.stringify({
+        name: '名稱',
+        category: '分類',
+        diameterMm: 8,
+      }),
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(401);
+  });
+
+  it('6. [S8 幾何聯動整合閉環]: 修改直徑 8mm -> 10mm -> Public GET 載入新直徑 -> 加入手串幾何引擎累加 10mm', async () => {
+    let beadRecord = {
+      id: 'moonstone-test',
+      name: '藍月光石',
+      category: '月光石',
+      diameter_mm: 8,
+      image_key: null,
+      fallback_color: '#D1D5DB',
+    };
+
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        if (query.includes('SELECT id, name, category, diameter_mm, image_key, fallback_color FROM beads WHERE id = ?')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue(beadRecord),
+            }),
+          };
+        }
+        if (query.includes('UPDATE beads SET name = ?, category = ?, diameter_mm = ?')) {
+          return {
+            bind: vi.fn().mockImplementation((name: string, category: string, diameter_mm: number) => ({
+              run: vi.fn().mockImplementation(async () => {
+                beadRecord = { ...beadRecord, name, category, diameter_mm };
+                return { success: true };
+              }),
+            })),
+          };
+        }
+        if (query.includes('SELECT id, name, category, diameter_mm, image_key, fallback_color FROM beads ORDER BY')) {
+          return {
+            all: vi.fn().mockResolvedValue({ results: [beadRecord] }),
+          };
+        }
+        return {};
+      }),
+    };
+
+    const env: Env = { DB: mockDb, ADMIN_SECRET: VALID_SECRET };
+
+    // Step 1: 後台將 8mm 編輯為 10mm
+    const putReq = new Request('http://localhost:8787/api/admin/beads/moonstone-test', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: JSON.stringify({
+        name: '藍月光石',
+        category: '月光石',
+        diameterMm: 10,
+      }),
+    });
+
+    const putRes = await worker.fetch(putReq, env, {});
+    expect(putRes.status).toBe(200);
+
+    // Step 2: 前台重新整理 (GET /api/beads)
+    const getReq = new Request('http://localhost:8787/api/beads', { method: 'GET' });
+    const getRes = await worker.fetch(getReq, env, {});
+    expect(getRes.status).toBe(200);
+
+    const catalog = await getRes.json();
+    expect(catalog[0].diameterMm).toBe(10);
+
+    // Step 3: 前台手串幾何計算 (加入手串 -> 1 顆 10mm -> 總直徑 10mm，目標 160mm 尚差 150mm)
+    const { calculateLengthSummary } = await import('../../src/domain/layout');
+    const summary = calculateLengthSummary([catalog[0]], 160);
+    expect(summary.count).toBe(1);
+    expect(summary.totalDiameterMm).toBe(10);
+    expect(summary.deltaMm).toBe(150);
+  });
+});
+
 

@@ -55,10 +55,11 @@
   - 規則：JPEG / PNG / WebP ≤ 5 MB，前端輕量檢核，Worker 驗證 MIME 與大小，伺服器隨機生成 key。
   - 前台 Catalog 與手串畫布支援顯示實拍圖（無圖時退回 fallback）。
 
-- [ ] **S8｜Edit Bead (修改尺寸/名稱/分類)**：
+- [x] **S8｜Edit Bead (修改尺寸/名稱/分類)**：
   - 後台修改直徑 (mm) 及名稱/分類，更新 D1 (`PUT /api/admin/beads/:id`)。
   - **核心不變量 (Invariant)**：修改商品規格只影響之後重新載入／重新加入手串的珠子；前台當下手串既有 state 不做背景同步與 reconciliation。
   - 前台重新整理 (refresh / refetch) 取得最新資料後，新加入手串之珠子由極座標幾何計算與長度統計同步採用新直徑。
+
 
 - [ ] **S9｜Full Integration Gate (全鏈路驗收門檻)**：
   - 登入 Admin
