@@ -10,8 +10,15 @@
  * 7. 驗證資料庫最終規格
  */
 
-const base = 'https://crystal-bracelet-api-staging.readwithus.workers.dev';
-const secret = 'cbs_staging_secret_7f8a3b1c9d2e4f5a6b0c';
+const base = process.env.STAGING_WORKER_URL || 'https://crystal-bracelet-api-staging.readwithus.workers.dev';
+const secret = process.argv[2] || process.env.ADMIN_SECRET;
+
+if (!secret) {
+  console.error('❌ 請提供 ADMIN_SECRET 作為命令列參數或環境變數！');
+  console.error('範例: node scripts/run_staging_e2e_flow.mjs <ADMIN_SECRET>');
+  process.exit(1);
+}
+
 
 async function runLiveFlow() {
   console.log('🚀 開始執行 S9 Real Cloudflare Live E2E 整合鏈路驗收...\n');

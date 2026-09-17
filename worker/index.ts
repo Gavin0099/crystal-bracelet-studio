@@ -11,11 +11,13 @@ export interface Env {
   CORS_ORIGIN?: string;
 }
 
-// 預設允許的 CORS Origins
+// 預設允許的 CORS Origins (嚴格固定白名單，不使用寬鬆之 *.pages.dev)
+
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'https://crystal-bracelet-studio.pages.dev',
+  'https://staging.crystal-bracelet-studio.pages.dev',
 ];
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB 限制
@@ -29,8 +31,8 @@ function getCorsHeaders(request: Request, env: Env): HeadersInit {
   const origin = request.headers.get('Origin') || '';
   const isAllowed =
     ALLOWED_ORIGINS.includes(origin) ||
-    (env.CORS_ORIGIN && origin === env.CORS_ORIGIN) ||
-    origin.endsWith('.pages.dev');
+    (env.CORS_ORIGIN && origin === env.CORS_ORIGIN);
+
 
   const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
