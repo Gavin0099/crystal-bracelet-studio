@@ -12,6 +12,10 @@
 
 > **專案定位**：輕量高反饋的晶選手串設計室（Web / Mobile-First）。
 > **架構定位**：前端靜態部署於 Cloudflare Pages，後端與商品圖片由 Cloudflare Workers + D1 + R2 提供。
+> **環境隔離策略 (Dual-Track Staging)**：
+> - **Production (`main`)**：維持客戶既有 Concept，交付前絕不動用，防止資料污染或提早洩漏。
+> - **Staging (`staging`)**：透過 Pages Preview + Worker `env.staging`（`crystal-bracelet-api-staging`、`crystal-bracelet-db-staging`、`crystal-bracelet-images-staging`）進行完整真實雲端驗收。注意：Preview URL 預設 public by default，不將 URL 隱蔽視為認證機制。
+
 
 ---
 

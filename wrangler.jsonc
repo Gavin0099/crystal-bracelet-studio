@@ -19,5 +19,27 @@
   ],
   "vars": {
     "CORS_ORIGIN": "https://crystal-bracelet-studio.pages.dev"
+  },
+  "env": {
+    "staging": {
+      "name": "crystal-bracelet-api-staging",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "crystal-bracelet-db-staging",
+          "database_id": "crystal-bracelet-db-staging-id"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "BEAD_IMAGES",
+          "bucket_name": "crystal-bracelet-images-staging"
+        }
+      ],
+      "vars": {
+        "CORS_ORIGIN": "https://staging.crystal-bracelet-studio.pages.dev"
+      }
+    }
   }
 }
+
