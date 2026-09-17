@@ -61,27 +61,35 @@
   - 前台重新整理 (refresh / refetch) 取得最新資料後，新加入手串之珠子由極座標幾何計算與長度統計同步採用新直徑。
 
 
-- [ ] **S9｜Full Integration Gate (全鏈路驗收門檻)**：
-  - 登入 Admin
-  - ↓ 新增 月光石 8mm
-  - ↓ D1 成功
-  - ↓ 前台 refresh
-  - ↓ 月光石 fallback 出現
-  - ↓ 上傳圖片 B
-  - ↓ D1 imageKey → B
-  - ↓ 前台 refresh
-  - ↓ 圖片出現
-  - ↓ 替換圖片 C
-  - ↓ D1 imageKey → C
-  - ↓ 舊 B 被清除
-  - ↓ 修改 8mm → 10mm
-  - ↓ 前台 refresh
-  - ↓ Catalog = 10mm
-  - ↓ 加入手串
-  - ↓ Geometry +10mm
-  - ↓ Reset
-  - ↓ 0 顆。全部 PASS。
-- [ ] **S10｜Production Release**：真機 iPhone Safari / Chrome 測試、生產環境正式部署、資料庫備份與交付。
+- [ ] **S9｜Full Integration Gate (真實 Cloudflare 生產環境 14 步驗收門檻)**：
+  - [ ] 1. Production Worker 部署成功。
+  - [ ] 2. Production D1 migration 套用成功 (`migrations/0001_create_beads.sql`)。
+  - [ ] 3. Seed catalog 成功 (`db/seed.sql`)。
+  - [ ] 4. Production R2 bucket binding 正常 (`BEAD_IMAGES`)。
+  - [ ] 5. `ADMIN_SECRET` 以 Worker secret 設定，絕不存在 repo。
+  - [ ] 6. Pages 的正式 API base URL 指向 production Worker。
+  - [ ] 7. 公開前台可正常讀取 `GET /api/beads`。
+  - [ ] 8. `/admin` 用錯 secret → 401；正確 secret → 成功進入。
+  - [ ] 9. 新增「月光石 / 8mm / 無照片」→ D1 成功建立。
+  - [ ] 10. 前台 refresh → 月光石 fallback 出現，加入後總長 +8mm。
+  - [ ] 11. 用**真實照片**上傳 → R2 有 object、D1 有 `imageKey`、前台 refresh 顯示實拍圖。
+  - [ ] 12. 換第二張照片 → 新圖顯示，舊 R2 object 正常清理（或產生 warning 但不影響成功）。
+  - [ ] 13. Admin 將 8mm → 10mm → 前台 refresh → 新加入珠子以 10mm 進幾何計算；已存在於手串內的舊珠子維持原有規格不被背景改寫。
+  - [ ] 14. Reset → 手串清空回歸 0 顆 / 0mm。全部 PASS。
+  - **Production Sanity Checks (環境完整性稽核)**：
+    - 非允許 origin 沒有 permissive CORS (`Access-Control-Allow-Origin`)。
+    - Production API 異常時前台明確呈現 error，絕不退回舊 mock。
+    - > 5MB 圖片確實被伺服器拒絕 (HTTP 400)。
+    - SVG 或非合法圖片格式確實被拒絕 (HTTP 415)。
+    - 圖片網址公開讀取正常 (`GET /api/images/*` 串流快取)。
+    - Admin Secret 絕無輸出至 browser bundle 或 log。
+- [ ] **S10｜Production Release & Client Handoff**：
+  - iPhone Safari / Android Chrome 真機驗收操作。
+  - Production URL 固定與 DNS 設定確認。
+  - D1 定期備份腳本與還原指引。
+  - Cloudflare 帳號與資源歸屬移轉（建議客戶自持帳號，避免維運負擔）。
+  - 單頁簡易店主操作手冊、驗收確認與 30 天保固啟動。
+
 
 ---
 
