@@ -391,6 +391,73 @@ describe('S7: Image Upload, Replacement & R2 Compensation Cleanup', () => {
     expect(mockR2Delete).toHaveBeenCalledWith(oldImageKey);
   });
 
+  it('2b. [舊圖清理失敗不中斷成功語意]: 若 R2 刪除舊圖失敗，仍應回傳 200 OK 且 D1 已更新，絕不回傳 500 造成使用者誤判', async () => {
+    const oldImageKey = 'beads/old-stubborn-image.jpg';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // 模擬刪除舊圖拋出異常 (如網路短暫抖動或 R2 權限短暫超時)
+    const mockR2Delete = vi.fn().mockRejectedValue(new Error('R2 Delete Network Timeout'));
+    const mockR2Put = vi.fn().mockResolvedValue({});
+    const mockR2 = { put: mockR2Put, delete: mockR2Delete, get: vi.fn() };
+
+    let savedKey = oldImageKey;
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        if (query.includes('SELECT id, image_key')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue({ id: 'bead-1', image_key: oldImageKey }),
+            }),
+          };
+        }
+        if (query.includes('UPDATE beads SET image_key')) {
+          return {
+            bind: vi.fn().mockImplementation((newKey: string) => ({
+              run: vi.fn().mockImplementation(async () => {
+                savedKey = newKey;
+                return { success: true };
+              }),
+            })),
+          };
+        }
+        return {};
+      }),
+    };
+
+    const env: Env = {
+      DB: mockDb,
+      BEAD_IMAGES: mockR2,
+      ADMIN_SECRET: VALID_SECRET,
+    };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/webp',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: new Uint8Array(256),
+    });
+
+    const response = await worker.fetch(request, env, {});
+    // 關鍵斷言：核心狀態已在 D1 生效，使用者操作必須回傳 200 OK
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.ok).toBe(true);
+    expect(savedKey).toBe(data.imageKey);
+
+    // 驗證確實嘗試刪除舊圖，並捕獲記錄警告而不崩潰
+    expect(mockR2Delete).toHaveBeenCalledWith(oldImageKey);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[S7 Cleanup Warning] Failed to delete old image'),
+      expect.any(Error)
+    );
+
+    warnSpy.mockRestore();
+  });
+
+
   it('3. [跨資源補償清理 Compensation Cleanup]: 當 R2 上傳成功但 D1 更新失敗時，應自動刪除新上傳的 R2 物件並回傳 500', async () => {
     const mockR2Put = vi.fn().mockResolvedValue({});
     const mockR2Delete = vi.fn().mockResolvedValue({});
