@@ -68,3 +68,21 @@ export async function getBeadCatalog(): Promise<BeadSpec[]> {
     return MOCK_BEADS;
   }
 }
+
+/**
+ * 取得珠子實拍圖片的公開讀取 URL (Worker R2 交付串流)
+ * 若 imageKey 為空則回傳 null，UI 應退回 fallbackColor 呈現
+ */
+export function getBeadImageUrl(imageKey?: string | null): string | null {
+  if (!imageKey || !imageKey.trim()) {
+    return null;
+  }
+  const isRelative = !API_BASE_URL.startsWith('http');
+  const base = isRelative
+    ? typeof window !== 'undefined'
+      ? ''
+      : 'http://localhost:8787'
+    : API_BASE_URL;
+  return `${base}/api/images/${imageKey.trim()}`;
+}
+

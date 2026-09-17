@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { BeadSpec } from '../../domain/types';
+import { getBeadImageUrl } from '../../services/bead-service';
 
 interface BeadSvgProps {
   bead: BeadSpec;
@@ -23,7 +24,9 @@ export const BeadSvg: React.FC<BeadSvgProps> = ({
   index,
 }) => {
   const gradientId = `bead-grad-${bead.id}-${index}`;
+  const clipId = `bead-clip-${bead.id}-${index}`;
   const baseColor = bead.fallbackColor || '#9c80bc';
+  const imageUrl = getBeadImageUrl(bead.imageKey);
 
   return (
     <g
@@ -42,6 +45,12 @@ export const BeadSvg: React.FC<BeadSvgProps> = ({
         <filter id={`drop-shadow-${index}`} x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.25" />
         </filter>
+        {/* 實拍照片球形裁剪邊界 */}
+        {imageUrl && (
+          <clipPath id={clipId}>
+            <circle cx={cx} cy={cy} r={radiusPx} />
+          </clipPath>
+        )}
       </defs>
 
       {/* 選中高亮外光環 */}
@@ -66,6 +75,28 @@ export const BeadSvg: React.FC<BeadSvgProps> = ({
         fill={`url(#${gradientId})`}
         filter={`url(#drop-shadow-${index})`}
       />
+
+      {/* 實拍圖片 (若有 imageKey 則渲染，無則維持底色球體) */}
+      {imageUrl && (
+        <g clipPath={`url(#${clipId})`}>
+          <image
+            href={imageUrl}
+            x={cx - radiusPx}
+            y={cy - radiusPx}
+            width={radiusPx * 2}
+            height={radiusPx * 2}
+            preserveAspectRatio="xMidYMid slice"
+          />
+          {/* 微弱球形水晶反光漸層疊加，增強照片融入度 */}
+          <circle
+            cx={cx}
+            cy={cy}
+            r={radiusPx}
+            fill={`url(#${gradientId})`}
+            opacity="0.25"
+          />
+        </g>
+      )}
 
       {/* 高光反光點 (提升水晶通透感) */}
       <ellipse

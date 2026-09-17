@@ -45,14 +45,16 @@
 - [x] **S6｜Add Bead (無照片亦可建立)**：
   - 後台新增珠子（名稱、分類、尺寸），寫入 D1；`image_key` 預設為 NULL，由系統自動提供預設 fallbackColor。
   - 前台重新載入時即可呈現新珠子。
-- [ ] **S7｜R2 Upload + Replace + 跨資源補償清理**：
+- [x] **S7｜R2 Upload + Replace + 跨資源補償清理**：
   - 每個珠子可上傳一張照片，並支援重新上傳取代。
   - 補償清理流程：
     1. 產生新 key `B`，上傳至 R2 (`R2.put(B)`)。
     2. 若失敗直接回傳 500；若成功則更新 D1 `image_key = B`。
     3. 若 D1 更新失敗，觸發補償清理刪除新圖 `R2.delete(B)`，不改動舊圖，回傳 500。
     4. 若 D1 更新成功，刪除舊圖 `R2.delete(A)`（若刪舊圖失敗不影響成功回應，記錄 warning）。
-  - 規則：JPEG / PNG / WebP ≤ 5 MB，前端輕量壓縮，Worker 驗證 MIME 與大小，伺服器隨機生成 key。
+  - 規則：JPEG / PNG / WebP ≤ 5 MB，前端輕量檢核，Worker 驗證 MIME 與大小，伺服器隨機生成 key。
+  - 前台 Catalog 與手串畫布支援顯示實拍圖（無圖時退回 fallback）。
+
 - [ ] **S8｜Edit Bead (修改尺寸/名稱/分類)**：
   - 後台修改直徑 (mm) 及名稱/分類，更新 D1。
   - 前台重新整理 (refresh / refetch) 取得最新資料後，手串幾何計算與長度統計同步採用新直徑。

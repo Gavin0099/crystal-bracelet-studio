@@ -11,6 +11,12 @@
       "database_id": "crystal-bracelet-db-local"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "BEAD_IMAGES",
+      "bucket_name": "crystal-bracelet-images"
+    }
+  ],
   "vars": {
     "CORS_ORIGIN": "https://crystal-bracelet-studio.pages.dev"
   }

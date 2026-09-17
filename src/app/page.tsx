@@ -4,8 +4,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { BeadSpec } from '../domain/types';
 import { calculateLengthSummary } from '../domain/layout';
 import { MOCK_BEADS } from '../data/mock-beads';
-import { getBeadCatalog } from '../services/bead-service';
+import { getBeadCatalog, getBeadImageUrl } from '../services/bead-service';
 import { BraceletCanvas } from '../components/canvas/BraceletCanvas';
+
 import { Trash2, Plus, Sparkles, RotateCcw, Info } from 'lucide-react';
 
 export default function Home() {
@@ -247,13 +248,24 @@ export default function Home() {
                 onClick={() => handleSelectCatalogBead(bead)}
                 className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-xs hover:border-indigo-400 flex flex-col items-center text-center transition-all active:scale-95 group"
               >
-                {/* 珠子外觀預覽 */}
-                <div
-                  className="w-9 h-9 rounded-full shadow-inner mb-1.5 flex items-center justify-center text-[10px] text-white font-bold transition-transform group-hover:scale-105"
-                  style={{ backgroundColor: bead.fallbackColor || '#8a62a7' }}
-                >
-                  {bead.diameterMm}
-                </div>
+                {/* 珠子外觀預覽 (實拍照片 / Fallback 色票) */}
+                {getBeadImageUrl(bead.imageKey) ? (
+                  <div className="w-9 h-9 rounded-full shadow-inner mb-1.5 overflow-hidden border border-slate-200/80 shrink-0 relative flex items-center justify-center transition-transform group-hover:scale-105 bg-slate-100">
+                    <img
+                      src={getBeadImageUrl(bead.imageKey)!}
+                      alt={bead.name}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="w-9 h-9 rounded-full shadow-inner mb-1.5 flex items-center justify-center text-[10px] text-white font-bold transition-transform group-hover:scale-105 shrink-0"
+                    style={{ backgroundColor: bead.fallbackColor || '#8a62a7' }}
+                  >
+                    {bead.diameterMm}
+                  </div>
+                )}
 
                 <div className="text-xs font-medium text-slate-800 line-clamp-1">
                   {bead.name.replace(/ \d+mm$/, '')}

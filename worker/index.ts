@@ -1,10 +1,12 @@
 /**
  * Cloudflare Worker API for Crystal Bracelet Studio
- * 提供前台公開讀取 API (GET /api/beads) 與後台受保護 Mutation APIs (/api/admin/*)
+ * 提供前台公開讀取 API (GET /api/beads, GET /api/images/*)
+ * 與後台受保護 Mutation APIs (/api/admin/*)
  */
 
 export interface Env {
   DB: any; // Cloudflare D1 Database Binding
+  BEAD_IMAGES?: any; // Cloudflare R2 Bucket Binding
   ADMIN_SECRET?: string; // 32-byte Shared Secret (Worker 環境變數，絕不寫入靜態 bundle)
   CORS_ORIGIN?: string;
 }
@@ -15,6 +17,13 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
   'https://crystal-bracelet-studio.pages.dev',
 ];
+
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB 限制
+const ALLOWED_MIME_TYPES: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 function getCorsHeaders(request: Request, env: Env): HeadersInit {
   const origin = request.headers.get('Origin') || '';
@@ -29,7 +38,6 @@ function getCorsHeaders(request: Request, env: Env): HeadersInit {
     'Access-Control-Max-Age': '86400',
   };
 
-  // 僅對受信任 Origin 附加 Allow-Origin，非信任 Origin 不提供放行 Header
   if (isAllowed && origin) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
@@ -38,10 +46,7 @@ function getCorsHeaders(request: Request, env: Env): HeadersInit {
 }
 
 /**
- * 檢查 Admin Mutation 操作的 Bearer Token 授權
- * 規則：
- * 1. 若伺服器未設定 ADMIN_SECRET，必須 Fail-Closed 回傳 500，絕不意外放行。
- * 2. 若缺少 Authorization Header 或 Token 不匹配，回傳 401。
+ * 檢查 Admin Mutation 操作的 Bearer Token 授權 (Fail-Closed 原則)
  */
 function verifyAdminAuthorization(
   request: Request,
@@ -94,7 +99,7 @@ export default {
     const path = url.pathname;
 
     try {
-      // 1. 公開讀取：GET /api/beads (Public - 永遠不需 credential，帶任意 token 一樣回傳公開資料)
+      // 1. 公開讀取：GET /api/beads (Public)
       if (request.method === 'GET' && path === '/api/beads') {
         if (!env.DB) {
           return new Response(
@@ -107,7 +112,6 @@ export default {
           `SELECT id, name, category, diameter_mm, image_key, fallback_color FROM beads ORDER BY created_at ASC`
         ).all();
 
-        // 轉換為前端 BeadSpec 領域模型
         const beads = (results || []).map((row: any) => ({
           id: row.id,
           name: row.name,
@@ -127,14 +131,49 @@ export default {
         });
       }
 
-      // 2. 受保護 Mutation APIs 命名空間：/api/admin/*
+      // 2. 公開讀取：GET /api/images/* (Cloudflare R2 串流交付)
+      if (request.method === 'GET' && path.startsWith('/api/images/')) {
+        if (!env.BEAD_IMAGES) {
+          return new Response(
+            JSON.stringify({ error: 'Storage binding BEAD_IMAGES is missing' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const imageKey = path.replace(/^\/api\/images\//, '');
+        if (!imageKey) {
+          return new Response(JSON.stringify({ error: 'Image key is required' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        const object = await env.BEAD_IMAGES.get(imageKey);
+        if (!object) {
+          return new Response(JSON.stringify({ error: 'Image not found' }), {
+            status: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        return new Response(object.body, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': object.httpMetadata?.contentType || 'image/webp',
+            'Cache-Control': 'public, max-age=86400, immutable',
+          },
+        });
+      }
+
+      // 3. 受保護 Mutation APIs 命名空間：/api/admin/*
       if (path.startsWith('/api/admin/')) {
         const authCheck = verifyAdminAuthorization(request, env);
         if (!authCheck.authorized) {
           return authCheck.errorResponse!;
         }
 
-        // S5a: 授權驗證檢查端點 (供 /admin 頁面測試 Token 有效性)
+        // S5a: 授權驗證檢查端點
         if (request.method === 'POST' && path === '/api/admin/verify') {
           return new Response(
             JSON.stringify({ ok: true, message: 'Authorized admin session valid' }),
@@ -142,7 +181,7 @@ export default {
           );
         }
 
-        // S6: 新增珠子 (Add Bead) — 伺服器端驗證並寫入 D1
+        // S6: 新增珠子 (POST /api/admin/beads)
         if (request.method === 'POST' && path === '/api/admin/beads') {
           if (!env.DB) {
             return new Response(
@@ -165,7 +204,6 @@ export default {
           const category = typeof body?.category === 'string' ? body.category.trim() : '';
           const diameterMm = Number(body?.diameterMm);
 
-          // 嚴格校驗：名稱與分類不可空白
           if (!name || !category) {
             return new Response(
               JSON.stringify({ error: 'Validation Error: name and category are required' }),
@@ -173,7 +211,6 @@ export default {
             );
           }
 
-          // 嚴格校驗：直徑必須為大於 0 之正數
           if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
             return new Response(
               JSON.stringify({ error: 'Validation Error: diameterMm must be a positive number' }),
@@ -181,7 +218,6 @@ export default {
             );
           }
 
-          // 伺服器端全權生成屬性 (使用標準 crypto.randomUUID()，不信任 Client 傳送之 id、imageKey 或色票)
           const beadId = `bead-${crypto.randomUUID()}`;
           const fallbackColor = '#D1D5DB';
 
@@ -206,15 +242,147 @@ export default {
           });
         }
 
-        // S7/S8 未來切片 Mutation：尚未實作一律回傳 501 Not Implemented (不回假 200)
-        if (
-          (request.method === 'PUT' && path.startsWith('/api/admin/beads/')) ||
-          (request.method === 'POST' && path.includes('/image'))
-        ) {
+        // S7: 上傳/替換珠子實拍圖片 (POST /api/admin/beads/:id/image)
+        const imageMatch = path.match(/^\/api\/admin\/beads\/([^/]+)\/image$/);
+        if (request.method === 'POST' && imageMatch) {
+          const beadId = imageMatch[1];
+
+          if (!env.DB) {
+            return new Response(
+              JSON.stringify({ error: 'Database binding DB is missing' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          if (!env.BEAD_IMAGES) {
+            return new Response(
+              JSON.stringify({ error: 'Storage binding BEAD_IMAGES is missing' }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 1. 確認該珠子存在於 D1 中
+          const existingBead = await env.DB.prepare(
+            `SELECT id, image_key FROM beads WHERE id = ?`
+          )
+            .bind(beadId)
+            .first();
+
+          if (!existingBead) {
+            return new Response(JSON.stringify({ error: 'Bead not found' }), {
+              status: 404,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // 2. 解析檔案內容與 MIME 檢查
+          let imageBuffer: ArrayBuffer;
+          let mimeType = '';
+
+          const contentTypeHeader = request.headers.get('Content-Type') || '';
+          if (contentTypeHeader.includes('multipart/form-data')) {
+            const formData = await request.formData();
+            const file = formData.get('file') as File | null;
+            if (!file) {
+              return new Response(JSON.stringify({ error: 'No file uploaded' }), {
+                status: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
+            mimeType = file.type;
+            imageBuffer = await file.arrayBuffer();
+          } else {
+            // 直接以 binary body 上傳
+            mimeType = contentTypeHeader.split(';')[0].trim();
+            imageBuffer = await request.arrayBuffer();
+          }
+
+          // 3. 安全驗證：MIME 與 大小 (≤ 5MB)
+          const ext = ALLOWED_MIME_TYPES[mimeType];
+          if (!ext) {
+            return new Response(
+              JSON.stringify({
+                error: 'Unsupported Media Type: Only JPEG, PNG, and WebP are allowed',
+              }),
+              { status: 415, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          if (imageBuffer.byteLength <= 0 || imageBuffer.byteLength > MAX_IMAGE_SIZE_BYTES) {
+            return new Response(
+              JSON.stringify({
+                error: `Payload size invalid: Must be > 0 and <= ${MAX_IMAGE_SIZE_BYTES} bytes`,
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // 4. 生成不可偽造之安全 Object Key
+          const newImageKey = `beads/${crypto.randomUUID()}.${ext}`;
+          const oldImageKey = existingBead.image_key;
+
+          // 5. 跨資源補償操作流程：
+          // Step 5a: 上傳新圖片至 R2
+          try {
+            await env.BEAD_IMAGES.put(newImageKey, imageBuffer, {
+              httpMetadata: { contentType: mimeType },
+            });
+          } catch (r2Err: any) {
+            // R2 PUT 失敗 -> D1 不動
+            return new Response(
+              JSON.stringify({ error: 'R2 upload failed', message: r2Err.message }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Step 5b: 更新 D1 image_key
+          try {
+            await env.DB.prepare(
+              `UPDATE beads SET image_key = ?, updated_at = unixepoch() WHERE id = ?`
+            )
+              .bind(newImageKey, beadId)
+              .run();
+          } catch (dbErr: any) {
+            // D1 更新失敗 -> 觸發補償清理：刪除剛上傳的新圖，維持舊圖有效
+            await env.BEAD_IMAGES.delete(newImageKey).catch(() => {});
+            return new Response(
+              JSON.stringify({
+                error: 'Database update failed; newly uploaded image was rolled back',
+                message: dbErr.message,
+              }),
+              { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Step 5c: D1 更新成功 -> 刪除舊圖 (若刪舊圖異常不中斷使用者成功，記錄 warning)
+          if (oldImageKey && oldImageKey !== newImageKey) {
+            try {
+              await env.BEAD_IMAGES.delete(oldImageKey);
+            } catch (delErr) {
+              console.warn(
+                `[S7 Cleanup Warning] Failed to delete old image ${oldImageKey}:`,
+                delErr
+              );
+            }
+          }
+
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              id: beadId,
+              imageKey: newImageKey,
+              message: 'Image uploaded and bound successfully',
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // S8 未來切片 Mutation：尚未實作回傳 501 Not Implemented
+        if (request.method === 'PUT' && path.startsWith('/api/admin/beads/')) {
           return new Response(
             JSON.stringify({
               error: 'Not Implemented',
-              message: 'This mutation endpoint is not yet implemented (scheduled for S7/S8).',
+              message: 'This mutation endpoint is not yet implemented (scheduled for S8).',
             }),
             { status: 501, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );

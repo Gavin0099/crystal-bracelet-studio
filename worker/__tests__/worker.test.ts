@@ -264,3 +264,318 @@ describe('S6: Add Bead & Worker Mutation Protection', () => {
     expect(body.error).toContain('ADMIN_SECRET is not configured');
   });
 });
+
+describe('S7: Image Upload, Replacement & R2 Compensation Cleanup', () => {
+  const VALID_SECRET = 'a_very_secure_random_32_byte_secret_value_123456';
+
+  it('1. POST /api/admin/beads/:id/image 上傳合法 WebP 圖片應成功寫入 R2 與 D1', async () => {
+    const mockR2Put = vi.fn().mockResolvedValue({});
+    const mockR2 = { put: mockR2Put, delete: vi.fn(), get: vi.fn() };
+
+    let currentImageKey: string | null = null;
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        if (query.includes('SELECT id, image_key')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue({ id: 'bead-1', image_key: currentImageKey }),
+            }),
+          };
+        }
+        if (query.includes('UPDATE beads SET image_key')) {
+          return {
+            bind: vi.fn().mockImplementation((newKey: string, beadId: string) => ({
+              run: vi.fn().mockImplementation(async () => {
+                currentImageKey = newKey;
+                return { success: true };
+              }),
+            })),
+          };
+        }
+        return {};
+      }),
+    };
+
+    const env: Env = {
+      DB: mockDb,
+      BEAD_IMAGES: mockR2,
+      ADMIN_SECRET: VALID_SECRET,
+    };
+
+    // 模擬二進位圖片 (1024 bytes WebP)
+    const fakeImageData = new Uint8Array(1024);
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/webp',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: fakeImageData,
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.ok).toBe(true);
+    expect(data.id).toBe('bead-1');
+    expect(data.imageKey).toMatch(/^beads\/[0-9a-f-]+\.webp$/);
+
+    // 驗證 R2.put 呼叫
+    expect(mockR2Put).toHaveBeenCalledWith(
+      data.imageKey,
+      expect.any(ArrayBuffer),
+      expect.objectContaining({ httpMetadata: { contentType: 'image/webp' } })
+    );
+
+    // 驗證 D1 UPDATE 呼叫
+    expect(currentImageKey).toBe(data.imageKey);
+  });
+
+  it('2. POST /api/admin/beads/:id/image 替換圖片時應成功上傳新圖並清理刪除舊圖 (R2 GC)', async () => {
+    const oldImageKey = 'beads/old-image-123.jpg';
+    const mockR2Delete = vi.fn().mockResolvedValue({});
+    const mockR2Put = vi.fn().mockResolvedValue({});
+    const mockR2 = { put: mockR2Put, delete: mockR2Delete, get: vi.fn() };
+
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        if (query.includes('SELECT id, image_key')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue({ id: 'bead-1', image_key: oldImageKey }),
+            }),
+          };
+        }
+        if (query.includes('UPDATE beads SET image_key')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              run: vi.fn().mockResolvedValue({ success: true }),
+            }),
+          };
+        }
+        return {};
+      }),
+    };
+
+    const env: Env = {
+      DB: mockDb,
+      BEAD_IMAGES: mockR2,
+      ADMIN_SECRET: VALID_SECRET,
+    };
+
+    const fakeImageData = new Uint8Array(512);
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/png',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: fakeImageData,
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(200);
+
+    const data = await response.json();
+    expect(data.imageKey).toMatch(/^beads\/[0-9a-f-]+\.png$/);
+
+    // 驗證新圖寫入
+    expect(mockR2Put).toHaveBeenCalledWith(
+      data.imageKey,
+      expect.any(ArrayBuffer),
+      expect.objectContaining({ httpMetadata: { contentType: 'image/png' } })
+    );
+
+    // 關鍵：驗證舊圖被主動刪除以防 R2 孤立垃圾檔案
+    expect(mockR2Delete).toHaveBeenCalledWith(oldImageKey);
+  });
+
+  it('3. [跨資源補償清理 Compensation Cleanup]: 當 R2 上傳成功但 D1 更新失敗時，應自動刪除新上傳的 R2 物件並回傳 500', async () => {
+    const mockR2Put = vi.fn().mockResolvedValue({});
+    const mockR2Delete = vi.fn().mockResolvedValue({});
+    const mockR2 = { put: mockR2Put, delete: mockR2Delete, get: vi.fn() };
+
+    const mockDb = {
+      prepare: vi.fn().mockImplementation((query: string) => {
+        if (query.includes('SELECT id, image_key')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              first: vi.fn().mockResolvedValue({ id: 'bead-1', image_key: null }),
+            }),
+          };
+        }
+        if (query.includes('UPDATE beads SET image_key')) {
+          return {
+            bind: vi.fn().mockReturnValue({
+              run: vi.fn().mockRejectedValue(new Error('D1 Disk Full or Constraint Violation')),
+            }),
+          };
+        }
+        return {};
+      }),
+    };
+
+    const env: Env = {
+      DB: mockDb,
+      BEAD_IMAGES: mockR2,
+      ADMIN_SECRET: VALID_SECRET,
+    };
+
+    const fakeImageData = new Uint8Array(256);
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/jpeg',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: fakeImageData,
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(500);
+
+    const data = await response.json();
+    expect(data.error).toContain('Database update failed; newly uploaded image was rolled back');
+
+    // 驗證新上傳到 R2 的 key 被觸發補償清理 (delete)
+    expect(mockR2Put).toHaveBeenCalled();
+    const uploadedKey = mockR2Put.mock.calls[0][0];
+    expect(mockR2Delete).toHaveBeenCalledWith(uploadedKey);
+  });
+
+  it('4. 上傳不支援之 MIME (如 SVG, GIF, EXE) 應回傳 415 Unsupported Media Type 且不觸發 R2/D1', async () => {
+    const mockR2Put = vi.fn();
+    const mockR2 = { put: mockR2Put, delete: vi.fn(), get: vi.fn() };
+    const mockDb = {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue({ id: 'bead-1', image_key: null }),
+        }),
+      }),
+    };
+
+    const env: Env = {
+      DB: mockDb,
+      BEAD_IMAGES: mockR2,
+      ADMIN_SECRET: VALID_SECRET,
+    };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/svg+xml',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: '<svg></svg>',
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(415);
+    expect(mockR2Put).not.toHaveBeenCalled();
+  });
+
+  it('5. 上傳超過 5MB 之檔案應回傳 400 Payload size invalid 且不觸發 R2/D1', async () => {
+    const mockR2Put = vi.fn();
+    const mockR2 = { put: mockR2Put, delete: vi.fn(), get: vi.fn() };
+    const mockDb = {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue({ id: 'bead-1', image_key: null }),
+        }),
+      }),
+    };
+
+    const env: Env = {
+      DB: mockDb,
+      BEAD_IMAGES: mockR2,
+      ADMIN_SECRET: VALID_SECRET,
+    };
+
+    // 5MB + 1 byte
+    const oversizedBuffer = new Uint8Array(5 * 1024 * 1024 + 1);
+    const request = new Request('http://localhost:8787/api/admin/beads/bead-1/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/jpeg',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: oversizedBuffer,
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.error).toContain('Payload size invalid');
+    expect(mockR2Put).not.toHaveBeenCalled();
+  });
+
+  it('6. 上傳目標珠子不存在 (404) 時應直接終止不觸發 R2', async () => {
+    const mockR2Put = vi.fn();
+    const mockR2 = { put: mockR2Put, delete: vi.fn(), get: vi.fn() };
+    const mockDb = {
+      prepare: vi.fn().mockReturnValue({
+        bind: vi.fn().mockReturnValue({
+          first: vi.fn().mockResolvedValue(null), // 珠子不存在
+        }),
+      }),
+    };
+
+    const env: Env = {
+      DB: mockDb,
+      BEAD_IMAGES: mockR2,
+      ADMIN_SECRET: VALID_SECRET,
+    };
+
+    const request = new Request('http://localhost:8787/api/admin/beads/non-existent/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/jpeg',
+        Authorization: `Bearer ${VALID_SECRET}`,
+      },
+      body: new Uint8Array(100),
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(404);
+    expect(mockR2Put).not.toHaveBeenCalled();
+  });
+
+  it('7. Public GET /api/images/* 串流端點應自 R2 讀取並附帶快取標頭回傳', async () => {
+    const fakeStream = 'image-stream-content';
+    const mockR2Get = vi.fn().mockResolvedValue({
+      body: fakeStream,
+      httpMetadata: { contentType: 'image/webp' },
+    });
+    const mockR2 = { get: mockR2Get, put: vi.fn(), delete: vi.fn() };
+
+    const env: Env = { DB: {}, BEAD_IMAGES: mockR2 };
+
+    const request = new Request('http://localhost:8787/api/images/beads/sample.webp', {
+      method: 'GET',
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Type')).toBe('image/webp');
+    expect(response.headers.get('Cache-Control')).toContain('public, max-age=86400');
+    expect(mockR2Get).toHaveBeenCalledWith('beads/sample.webp');
+  });
+
+  it('8. Public GET /api/images/* 找不到物件時應回傳 404 Not Found', async () => {
+    const mockR2Get = vi.fn().mockResolvedValue(null);
+    const mockR2 = { get: mockR2Get, put: vi.fn(), delete: vi.fn() };
+
+    const env: Env = { DB: {}, BEAD_IMAGES: mockR2 };
+
+    const request = new Request('http://localhost:8787/api/images/beads/missing.webp', {
+      method: 'GET',
+    });
+
+    const response = await worker.fetch(request, env, {});
+    expect(response.status).toBe(404);
+    const data = await response.json();
+    expect(data.error).toBe('Image not found');
+  });
+});
+

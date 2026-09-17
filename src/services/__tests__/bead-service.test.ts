@@ -107,4 +107,21 @@ describe('S4: BeadService & Catalog Storage API Integration', () => {
       expect((bead as any).currency).toBeUndefined();
     }
   });
+
+  describe('getBeadImageUrl', () => {
+    it('若 imageKey 存在且有效，應回傳包含 /api/images/ 的完整或相對路徑', async () => {
+      const { getBeadImageUrl } = await import('../bead-service');
+      const url = getBeadImageUrl('beads/amethyst.webp');
+      expect(url).toContain('/api/images/beads/amethyst.webp');
+    });
+
+    it('若 imageKey 為 null, undefined 或空白字串，應回傳 null', async () => {
+      const { getBeadImageUrl } = await import('../bead-service');
+      expect(getBeadImageUrl(null)).toBeNull();
+      expect(getBeadImageUrl(undefined)).toBeNull();
+      expect(getBeadImageUrl('')).toBeNull();
+      expect(getBeadImageUrl('   ')).toBeNull();
+    });
+  });
 });
+
