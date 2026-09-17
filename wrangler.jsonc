@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "crystal-bracelet-api",
+  "main": "worker/index.ts",
+  "compatibility_date": "2024-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "crystal-bracelet-db",
+      "database_id": "crystal-bracelet-db-local"
+    }
+  ],
+  "vars": {
+    "CORS_ORIGIN": "https://crystal-bracelet-studio.pages.dev"
+  }
+}

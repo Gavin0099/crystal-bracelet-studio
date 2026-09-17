@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx vitest run src/domain/__tests__"
+    "test": "npx vitest run src/domain/__tests__ src/services/__tests__ worker/__tests__"
   },
   "dependencies": {
     "lucide-react": "^1.46.0",

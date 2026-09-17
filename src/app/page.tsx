@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BeadSpec } from '../domain/types';
 import { calculateLengthSummary } from '../domain/layout';
 import { MOCK_BEADS } from '../data/mock-beads';
+import { getBeadCatalog } from '../services/bead-service';
 import { BraceletCanvas } from '../components/canvas/BraceletCanvas';
 import { Trash2, Plus, Sparkles, RotateCcw, Info } from 'lucide-react';
 
@@ -16,6 +17,29 @@ export default function Home() {
   const [targetWristMm, setTargetWristMm] = useState<number>(160);
   // 水晶分類篩選
   const [activeCategory, setActiveCategory] = useState<string>('全部');
+  // S4: 水晶目錄狀態與載入控制 (Production 採 Fail-Closed)
+  const [catalog, setCatalog] = useState<BeadSpec[]>(
+    process.env.NODE_ENV === 'development' ? MOCK_BEADS : []
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadCatalog = React.useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await getBeadCatalog();
+      setCatalog(data);
+    } catch (err: any) {
+      setLoadError('商品資料暫時無法載入，請稍後再試');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCatalog();
+  }, [loadCatalog]);
 
   // 計算長度統計 (Functional Core - 零價格計算)
   const lengthSummary = useMemo(
@@ -25,15 +49,15 @@ export default function Home() {
 
   // 分類列表
   const categories = useMemo(() => {
-    const set = new Set(MOCK_BEADS.map((b) => b.category));
+    const set = new Set(catalog.map((b) => b.category));
     return ['全部', ...Array.from(set)];
-  }, []);
+  }, [catalog]);
 
   // 篩選後的水晶目錄
   const filteredCatalog = useMemo(() => {
-    if (activeCategory === '全部') return MOCK_BEADS;
-    return MOCK_BEADS.filter((b) => b.category === activeCategory);
-  }, [activeCategory]);
+    if (activeCategory === '全部') return catalog;
+    return catalog.filter((b) => b.category === activeCategory);
+  }, [catalog, activeCategory]);
 
   // 點擊目錄中的珠子 -> 加入手串 (或若有選取槽位則替換)
   const handleSelectCatalogBead = (bead: BeadSpec) => {
@@ -201,33 +225,49 @@ export default function Home() {
         </div>
 
         {/* 水晶目錄卡片 (只顯示名稱與尺寸，零價格) */}
-        <div className="grid grid-cols-3 gap-2 max-h-[220px] overflow-y-auto p-1 bg-slate-100/60 rounded-xl border border-slate-200">
-          {filteredCatalog.map((bead) => (
+        {loadError ? (
+          <div className="w-full bg-amber-50 border border-amber-200 rounded-xl p-6 text-center text-amber-900 text-xs flex flex-col items-center justify-center gap-2.5 my-1 shadow-xs">
+            <p className="font-medium">{loadError}</p>
             <button
-              key={bead.id}
-              onClick={() => handleSelectCatalogBead(bead)}
-              className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-xs hover:border-indigo-400 flex flex-col items-center text-center transition-all active:scale-95 group"
+              onClick={loadCatalog}
+              className="px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-amber-900 hover:bg-amber-100 font-semibold shadow-xs transition-colors"
             >
-              {/* 珠子外觀預覽 */}
-              <div
-                className="w-9 h-9 rounded-full shadow-inner mb-1.5 flex items-center justify-center text-[10px] text-white font-bold transition-transform group-hover:scale-105"
-                style={{ backgroundColor: bead.fallbackColor || '#8a62a7' }}
-              >
-                {bead.diameterMm}
-              </div>
-
-              <div className="text-xs font-medium text-slate-800 line-clamp-1">
-                {bead.name.replace(/ \d+mm$/, '')}
-              </div>
-              <div className="text-[11px] font-semibold text-indigo-600 mt-0.5">
-                {bead.diameterMm} mm
-              </div>
-              <div className="mt-1 text-[10px] text-slate-500 font-medium flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Plus className="w-3 h-3" /> 加選手串
-              </div>
+              重新載入
             </button>
-          ))}
-        </div>
+          </div>
+        ) : isLoading && catalog.length === 0 ? (
+          <div className="w-full h-32 bg-slate-100/60 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 text-xs">
+            載入水晶清單中...
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2 max-h-[220px] overflow-y-auto p-1 bg-slate-100/60 rounded-xl border border-slate-200">
+            {filteredCatalog.map((bead) => (
+              <button
+                key={bead.id}
+                onClick={() => handleSelectCatalogBead(bead)}
+                className="bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-xs hover:border-indigo-400 flex flex-col items-center text-center transition-all active:scale-95 group"
+              >
+                {/* 珠子外觀預覽 */}
+                <div
+                  className="w-9 h-9 rounded-full shadow-inner mb-1.5 flex items-center justify-center text-[10px] text-white font-bold transition-transform group-hover:scale-105"
+                  style={{ backgroundColor: bead.fallbackColor || '#8a62a7' }}
+                >
+                  {bead.diameterMm}
+                </div>
+
+                <div className="text-xs font-medium text-slate-800 line-clamp-1">
+                  {bead.name.replace(/ \d+mm$/, '')}
+                </div>
+                <div className="text-[11px] font-semibold text-indigo-600 mt-0.5">
+                  {bead.diameterMm} mm
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500 font-medium flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Plus className="w-3 h-3" /> 加選手串
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </footer>
     </div>
   );

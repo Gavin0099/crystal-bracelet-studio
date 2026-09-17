@@ -7,7 +7,7 @@ export interface BeadSpec {
   readonly name: string;
   readonly category: string;
   readonly diameterMm: number;
-  readonly imageUrl?: string;           // 實拍圖 (Cloudflare R2)
+  readonly imageKey?: string | null;    // 相對物件鍵 (例如 beads/01K5ABC123.webp，真正顯示時再拼裝 Delivery URL)
   readonly fallbackColor?: string;      // 缺省或加載中時的色票
 }
 
