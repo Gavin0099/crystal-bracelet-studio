@@ -7,7 +7,8 @@ import { MOCK_BEADS } from '../data/mock-beads';
 import { getBeadCatalog, getBeadImageUrl } from '../services/bead-service';
 import { BraceletCanvas } from '../components/canvas/BraceletCanvas';
 
-import { Trash2, Plus, Sparkles, RotateCcw, Info } from 'lucide-react';
+import Link from 'next/link';
+import { Trash2, Plus, Sparkles, RotateCcw, Info, Settings } from 'lucide-react';
 
 export default function Home() {
   // S1: 手串預設為 0 顆起始 (Empty Bracelet)
@@ -109,6 +110,14 @@ export default function Home() {
             <RotateCcw className="w-3.5 h-3.5" />
             重設
           </button>
+          <Link
+            href="/admin"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors font-medium border border-slate-200"
+            title="商品管理後台"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            後台
+          </Link>
         </div>
       </header>
 

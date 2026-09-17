@@ -412,6 +412,15 @@ export default function AdminPage() {
         {!isAuthenticated ? (
           // 登入畫面
           <div className="w-full flex flex-col items-center">
+            <div className="w-full flex justify-start mb-3">
+              <Link
+                href="/"
+                className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1 font-medium bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                返回手串設計
+              </Link>
+            </div>
             <h1 className="text-lg font-bold text-slate-900 mb-1">管理員存取</h1>
             <p className="text-xs text-slate-500 mb-6 text-center">
               單一店主輕量安全保護 (Session-only)
@@ -451,9 +460,18 @@ export default function AdminPage() {
           // 已授權管理介面 (S6 新增 + S7 圖片上傳/替換)
           <div className="w-full flex flex-col">
             <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
-              <div>
-                <h1 className="text-base font-bold text-slate-900">水晶珠管理工作台</h1>
-                <p className="text-xs text-slate-500">S6: 屬性建立 ｜ S7: 實拍圖片管理</p>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/"
+                  className="text-xs text-slate-500 hover:text-indigo-600 p-1.5 rounded-md hover:bg-slate-100 transition-colors"
+                  title="返回前台手串設計"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </Link>
+                <div>
+                  <h1 className="text-base font-bold text-slate-900">水晶珠管理工作台</h1>
+                  <p className="text-xs text-slate-500">S6: 屬性建立 ｜ S7: 實拍圖片管理</p>
+                </div>
               </div>
               <button
                 onClick={handleLogout}
