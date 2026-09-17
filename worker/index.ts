@@ -181,8 +181,8 @@ export default {
             );
           }
 
-          // 伺服器端全權生成屬性 (不信任 Client 傳送之 id、imageKey 或色票)
-          const beadId = `bead-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          // 伺服器端全權生成屬性 (使用標準 crypto.randomUUID()，不信任 Client 傳送之 id、imageKey 或色票)
+          const beadId = `bead-${crypto.randomUUID()}`;
           const fallbackColor = '#D1D5DB';
 
           await env.DB.prepare(
