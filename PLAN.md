@@ -13,8 +13,9 @@
 > **專案定位**：輕量高反饋的晶選手串設計室（Web / Mobile-First）。
 > **架構定位**：前端靜態部署於 Cloudflare Pages，後端與商品圖片由 Cloudflare Workers + D1 + R2 提供。
 > **環境隔離策略 (Dual-Track Staging)**：
-> - **Production (`main`)**：維持客戶既有 Concept，交付前絕不動用，防止資料污染或提早洩漏。
-> - **Staging (`staging`)**：透過 Pages Preview + Worker `env.staging`（`crystal-bracelet-api-staging`、`crystal-bracelet-db-staging`、`crystal-bracelet-images-staging`）進行完整真實雲端驗收。注意：Preview URL 預設 public by default，不將 URL 隱蔽視為認證機制。
+> - **production**：正式對外版本，目前凍結在客戶已確認之 Concept v0.1 (`5175320`)，簽約與交付前絕不動用，防止資料污染或提早洩漏。
+> - **main**：最新正式版整合主線（S0～S9 核心代碼已就緒）。
+> - **staging**：透過 Pages Preview + Worker `env.staging`（`crystal-bracelet-api-staging`、`crystal-bracelet-db-staging`、`crystal-bracelet-images-staging`）進行真實雲端驗收。注意：Preview URL 預設 public by default，不將 URL 隱蔽視為認證機制。
 
 
 ---
@@ -86,15 +87,20 @@
     - [x] > 5MB 圖片確實被伺服器拒絕 (HTTP 400)。
     - [x] 非合法格式 (text/plain) 確實被拒絕 (HTTP 415)。
     - [x] 圖片網址公開讀取正常 (`GET /api/images/*` 串流快取標頭 `public, max-age=86400, immutable`)。
-    - [x] Scope Freeze 未實作端點 (DELETE) 回傳 501 Not Implemented。
-    - [x] Admin Secret 絕無輸出至 browser bundle 或 log。
-
-- [ ] **S10｜Production Release & Client Handoff**：
-  - iPhone Safari / Android Chrome 真機驗收操作。
-  - Production URL 固定與 DNS 設定確認。
-  - D1 定期備份腳本與還原指引。
-  - Cloudflare 帳號與資源歸屬移轉（建議客戶自持帳號，避免維運負擔）。
-  - 單頁簡易店主操作手冊、驗收確認與 30 天保固啟動。
+- [ ] **S10｜Production Release & Client Handoff (待簽約完成後執行 - Pending Contract Signing)**：
+  - **商業邊界**：因尚未簽約，正式部署暫不執行；正式網址 `crystal-bracelet-studio.pages.dev` 維持鎖定 Concept v0.1。
+  - **正式發布 6 步流程 (簽約後執行)**：
+    1. 建立 Production D1 (`crystal-bracelet-db-prod`) 與 R2 (`crystal-bracelet-images-prod`)。
+    2. 套用 migration 與 seed 初始目錄。
+    3. 建立 Production Worker bindings。
+    4. 伺服器端生成獨立之全新 Production `ADMIN_SECRET`（絕不沿用 staging，不寫入對話/代碼/PLAN）。
+    5. 將已驗證版本從 `main` 合併至 `production` 分支，由 Cloudflare Pages 自動部署至 `crystal-bracelet-studio.pages.dev`。
+    6. 使用 iPhone Safari 進行正式上線驗收（Catalog、Admin 登入、新增珠子、上傳/替換照片、修改尺寸、前台重新整理、加入手串、Reset 回 0 顆；Android Chrome 採 best-effort 不作交付 blocker）。
+  - **交付資產與責任邊界**：
+    - 一頁精簡店主操作手冊 (Markdown/PDF)。
+    - 資料庫匯出備份／還原指引。
+    - 資源歸屬確認（若客戶自持帳號則轉移；若開發者帳號代管則明確標明免費額度維護邊界，無後續無償維運義務）。
+    - 正式驗收確認，結算尾款，啟動 30 天 Bug 保固。
 
 
 ---

@@ -16,9 +16,11 @@
 
 ## Next Steps
 
-- S10 Production Release & Client Handoff:
-  1. Generate independent, unexposed production secret for Worker.
-  2. Deploy production Worker, D1 migrations, and R2 bucket (or handoff to client Cloudflare account).
-  3. Merge and deploy production branch to Pages.
-  4. Provide D1 backup script & 1-page Admin User Manual.
-  5. Hand off repository, initiate 30-day warranty.
+- S10 Production Release & Client Handoff (待正式簽約後執行 - Pending Contract Signing):
+  1. 商業邊界：尚未簽約，Production 資源建置與正式網址發布暫緩執行；客戶端持續鎖定 Concept v0.1 (`5175320`)。
+  2. 簽約後執行 6 步發布流程：
+     - 建立獨立 Production D1/R2、套用 migration/seed。
+     - 伺服器端產生全新 Production ADMIN_SECRET（不寫入任何日誌/代碼）。
+     - 綁定 Worker 並將 main 合併至 production 分支部署至 Pages。
+     - iPhone Safari 跑最後 9 步 smoke test。
+     - 交付 1 頁操作手冊、備份還原腳本，確認帳號責任邊界，啟動 30 天保固。
