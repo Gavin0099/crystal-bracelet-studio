@@ -11,16 +11,16 @@
 # ── PROVENANCE ────────────────────────────────────────────────────────────────
 schema_version: "1"
 baseline_version: 1.0.0
-source_commit: 912e6dca015d2bff864a8851c6fceda8d51b632d
+source_commit: 4cbac2a2fe80e8cd3df0dfe7e32061e0cd18f4aa
 framework_root: E:\BackUp\Git_EE\crystal-bracelet-studio\additional\ai-governance-framework
-initialized_at: 2026-09-17T02:28:01Z
+initialized_at: 2026-09-17T02:33:54Z
 initialized_by: governance_tools/adopt_governance.py
 
 # ── INTEGRITY ─────────────────────────────────────────────────────────────────
 # sha256.<file>: canonical-LF hash recorded at init/refresh time; "protected" files are hash-verified
 # overridable.<file>: protected = must not change | overridable = repo may extend freely
 sha256.AGENTS.base.md: 20f247a26575cc0e2e9f09be68ea057ac9a8f5d81ab56717e21a94e43ee3043b
-sha256.PLAN.md: 664d90caeed30818c12332b60f4b0a42a58e02cdeffbf7f424772e6e1e653b8c
+sha256.PLAN.md: a226017a81d7fecd922e93b4e001dbcbeb8360de7113cf4bc970e09b45a34954
 sha256.contract.yaml: 1792f693ae57727e503a3550288caeb302335809748b207f05bf2916d6fcf4ac
 sha256.AGENTS.md: f132e80b8b2fd40e46ee9dfa2e12270117030c3286550c049f00b4797e3e8fb8
 overridable.AGENTS.base.md: protected
@@ -46,6 +46,6 @@ contract_required_fields:
 # plan_section_inventory: ## headings detected in PLAN.md at adoption/refresh time.
 #   Drift checker surfaces these for visibility but never fails on missing inventory items.
 plan_section_inventory:
-  - "## 1. 當前進度與階段 (Current Phase)"
-  - "## 2. 後續階段規劃 (Future Roadmap)"
-  - "## 3. 治理與邊界契約 (Governance & Scope Boundary)"
+  - "## 1. 需求邊界凍結 (Scope Freeze)"
+  - "## 2. 切片進度 (Vertical Slices Status)"
+  - "## 3. 治理與品質護欄 (Governance & Quality Guardrails)"

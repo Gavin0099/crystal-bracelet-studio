@@ -7,8 +7,6 @@ const createMockBead = (id: string, diameterMm: number): BeadSpec => ({
   name: `Bead ${id}`,
   category: 'Quartz',
   diameterMm,
-  priceMinor: 2000,
-  currency: 'TWD',
 });
 
 describe('Bracelet Layout Functional Core (Invariants)', () => {

@@ -1,14 +1,13 @@
 /**
  * 珠子規格定義 (純資料領域模型)
+ * 正式版收斂模型：一個商品 = 一個尺寸，不含價格與庫存
  */
 export interface BeadSpec {
   readonly id: string;
   readonly name: string;
   readonly category: string;
   readonly diameterMm: number;
-  readonly priceMinor: number;          // 金額以小單位整數計（如 TWD 3000 = NT$30, CNY 1700 = ¥17.00）
-  readonly currency: 'TWD' | 'CNY';
-  readonly imageUrl?: string;           // 實拍圖
+  readonly imageUrl?: string;           // 實拍圖 (Cloudflare R2)
   readonly fallbackColor?: string;      // 缺省或加載中時的色票
 }
 

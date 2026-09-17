@@ -3,13 +3,13 @@
 import React, { useState, useMemo } from 'react';
 import { BeadSpec } from '../domain/types';
 import { calculateLengthSummary } from '../domain/layout';
-import { MOCK_BEADS, DEFAULT_BRACELET_BEADS } from '../data/mock-beads';
+import { MOCK_BEADS } from '../data/mock-beads';
 import { BraceletCanvas } from '../components/canvas/BraceletCanvas';
-import { Trash2, Plus, Sparkles, RefreshCw, Info } from 'lucide-react';
+import { Trash2, Plus, Sparkles, RotateCcw, Info } from 'lucide-react';
 
 export default function Home() {
-  // 手串中目前的珠子清單 (S1 ~ S4 狀態)
-  const [braceletBeads, setBraceletBeads] = useState<BeadSpec[]>(DEFAULT_BRACELET_BEADS);
+  // S1: 手串預設為 0 顆起始 (Empty Bracelet)
+  const [braceletBeads, setBraceletBeads] = useState<BeadSpec[]>([]);
   // 目前在手串中選取的珠子索引 (用於刪除/替換)
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
   // 目標參考手圍長度 (mm)
@@ -17,16 +17,10 @@ export default function Home() {
   // 水晶分類篩選
   const [activeCategory, setActiveCategory] = useState<string>('全部');
 
-  // 計算長度統計 (Functional Core)
+  // 計算長度統計 (Functional Core - 零價格計算)
   const lengthSummary = useMemo(
     () => calculateLengthSummary(braceletBeads, targetWristMm),
     [braceletBeads, targetWristMm]
-  );
-
-  // 計算設計目前總價 (TWD)
-  const totalPriceTwd = useMemo(
-    () => braceletBeads.reduce((acc, b) => acc + Math.round(b.priceMinor / 100), 0),
-    [braceletBeads]
   );
 
   // 分類列表
@@ -41,7 +35,7 @@ export default function Home() {
     return MOCK_BEADS.filter((b) => b.category === activeCategory);
   }, [activeCategory]);
 
-  // S3: 點擊目錄中的珠子 -> 加入手串 (或若有選取槽位則替換)
+  // 點擊目錄中的珠子 -> 加入手串 (或若有選取槽位則替換)
   const handleSelectCatalogBead = (bead: BeadSpec) => {
     if (selectedSlotIndex !== null && selectedSlotIndex < braceletBeads.length) {
       // 替換已選取的槽位
@@ -55,20 +49,14 @@ export default function Home() {
     }
   };
 
-  // S4: 刪除手串上的指定珠子
+  // 刪除手串上的指定珠子
   const handleRemoveBead = (indexToRemove: number) => {
     setBraceletBeads((prev) => prev.filter((_, i) => i !== indexToRemove));
     setSelectedSlotIndex(null);
   };
 
-  // 重置手串為預設展示
+  // S1: Reset 直接清空回到 0 顆
   const handleReset = () => {
-    setBraceletBeads(DEFAULT_BRACELET_BEADS);
-    setSelectedSlotIndex(null);
-  };
-
-  // 清空手串
-  const handleClear = () => {
     setBraceletBeads([]);
     setSelectedSlotIndex(null);
   };
@@ -83,31 +71,25 @@ export default function Home() {
           </div>
           <div>
             <h1 className="text-base font-semibold text-slate-900 leading-tight">晶選手串工作室</h1>
-            <p className="text-xs text-slate-500">Concept v0.1 原型驗證</p>
+            <p className="text-xs text-slate-500">自由串珠設計</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5">
           <button
             onClick={handleReset}
-            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors"
-            title="重設樣品"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-colors font-medium border border-slate-200"
+            title="清空重設 (回到 0 顆)"
           >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleClear}
-            className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-slate-100 rounded-md transition-colors"
-            title="清空"
-          >
-            <Trash2 className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
+            重設
           </button>
         </div>
       </header>
 
       {/* 主體手串可視區 (Mobile First) */}
       <main className="w-full max-w-md flex-1 flex flex-col items-center px-4 py-2">
-        {/* S6: 長度與手圍指標卡 (誠實無過度保證) */}
+        {/* 長度與手圍指標卡 (純尺寸與長度差值，零價格顯示) */}
         <div className="w-full bg-white rounded-xl border border-slate-200 p-3 shadow-xs mb-2">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
             <span className="font-medium text-slate-700 flex items-center gap-1">
@@ -130,31 +112,37 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="grid grid-cols-4 gap-1.5 py-1 text-center border-t border-slate-100 pt-2">
+          <div className="grid grid-cols-3 gap-2 py-1 text-center border-t border-slate-100 pt-2">
             <div className="bg-slate-50 rounded-lg p-1.5">
-              <div className="text-[10px] text-slate-500">珠數</div>
-              <div className="text-sm font-bold text-slate-800">{lengthSummary.count} <span className="text-[10px] font-normal">顆</span></div>
-            </div>
-            <div className="bg-slate-50 rounded-lg p-1.5">
-              <div className="text-[10px] text-slate-500">總直徑</div>
-              <div className="text-sm font-bold text-slate-800">{lengthSummary.totalDiameterMm} <span className="text-[10px] font-normal">mm</span></div>
-            </div>
-            <div className={`rounded-lg p-1.5 ${lengthSummary.deltaMm >= 0 ? 'bg-indigo-50 text-indigo-900' : 'bg-amber-50 text-amber-900'}`}>
-              <div className="text-[10px] opacity-75">{lengthSummary.deltaMm >= 0 ? '尚差' : '超出'}</div>
-              <div className="text-sm font-bold">
-                {Math.abs(lengthSummary.deltaMm)} <span className="text-[10px] font-normal">mm</span>
+              <div className="text-[11px] text-slate-500">珠數</div>
+              <div className="text-base font-bold text-slate-800">
+                {lengthSummary.count} <span className="text-xs font-normal">顆</span>
               </div>
             </div>
-            <div className="bg-emerald-50 text-emerald-900 rounded-lg p-1.5">
-              <div className="text-[10px] opacity-75">預估總價</div>
-              <div className="text-sm font-bold">
-                NT${totalPriceTwd}
+            <div className="bg-slate-50 rounded-lg p-1.5">
+              <div className="text-[11px] text-slate-500">目前總直徑</div>
+              <div className="text-base font-bold text-slate-800">
+                {lengthSummary.totalDiameterMm} <span className="text-xs font-normal">mm</span>
+              </div>
+            </div>
+            <div
+              className={`rounded-lg p-1.5 ${
+                lengthSummary.deltaMm >= 0
+                  ? 'bg-indigo-50 text-indigo-900'
+                  : 'bg-amber-50 text-amber-900'
+              }`}
+            >
+              <div className="text-[11px] opacity-75">
+                {lengthSummary.deltaMm >= 0 ? '尚差長度' : '超出長度'}
+              </div>
+              <div className="text-base font-bold">
+                {Math.abs(lengthSummary.deltaMm)} <span className="text-xs font-normal">mm</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 手串 SVG 畫布 (S1 & S5) */}
+        {/* 手串 SVG 畫布 */}
         <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col items-center justify-center relative overflow-hidden py-1">
           <BraceletCanvas
             beads={braceletBeads}
@@ -162,7 +150,7 @@ export default function Home() {
             onSelectBead={(idx) => setSelectedSlotIndex(idx === selectedSlotIndex ? null : idx)}
           />
 
-          {/* S4: 選取珠子時的快捷操作浮動條 */}
+          {/* 選取珠子時的快捷操作浮動條 */}
           {selectedSlotIndex !== null && braceletBeads[selectedSlotIndex] && (
             <div className="absolute bottom-3 bg-slate-900/90 backdrop-blur-xs text-white px-3 py-1.5 rounded-full shadow-lg flex items-center gap-3 text-xs animate-in fade-in zoom-in duration-150">
               <span className="font-medium text-slate-200">
@@ -186,12 +174,12 @@ export default function Home() {
         </div>
       </main>
 
-      {/* S2 & S3: 底部水晶選品抽屜 (Catalog) */}
+      {/* 底部水晶選品抽屜 (Catalog - 零價格純規格) */}
       <footer className="w-full max-w-md px-4 flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-700">選擇水晶加入手串</span>
+          <span className="text-xs font-semibold text-slate-700">挑選水晶加入手串</span>
           {selectedSlotIndex !== null && (
-            <span className="text-xs text-indigo-600 font-medium">點選珠子進行替換</span>
+            <span className="text-xs text-indigo-600 font-medium">點選水晶進行替換</span>
           )}
         </div>
 
@@ -212,7 +200,7 @@ export default function Home() {
           ))}
         </div>
 
-        {/* 水晶目錄卡片橫向捲動列表 */}
+        {/* 水晶目錄卡片 (只顯示名稱與尺寸，零價格) */}
         <div className="grid grid-cols-3 gap-2 max-h-[220px] overflow-y-auto p-1 bg-slate-100/60 rounded-xl border border-slate-200">
           {filteredCatalog.map((bead) => (
             <button
@@ -231,10 +219,10 @@ export default function Home() {
               <div className="text-xs font-medium text-slate-800 line-clamp-1">
                 {bead.name.replace(/ \d+mm$/, '')}
               </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">
-                {bead.diameterMm}mm · NT${Math.round(bead.priceMinor / 100)}
+              <div className="text-[11px] font-semibold text-indigo-600 mt-0.5">
+                {bead.diameterMm} mm
               </div>
-              <div className="mt-1 text-[10px] text-indigo-600 font-medium flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="mt-1 text-[10px] text-slate-500 font-medium flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Plus className="w-3 h-3" /> 加選手串
               </div>
             </button>
